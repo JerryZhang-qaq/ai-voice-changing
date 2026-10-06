@@ -34,7 +34,18 @@ def test_exit_status_and_log_preserved(tmp_path):
     log = tmp_path / "engine.log"
     with pytest.raises(EngineError, match="退出码 7"):
         run_process([sys.executable, "-c", "print('real failure', flush=True); raise SystemExit(7)"], cwd=tmp_path, log=log)
-    assert "real failure" in log.read_text()
+    content = log.read_text(encoding="utf-8")
+    assert "real failure" in content
+    assert "engine_start_requested" in content and '"exit_code": 7' in content
+
+
+def test_silent_engine_failure_has_diagnostics(tmp_path):
+    log = tmp_path / "engine.log"
+    with pytest.raises(EngineError, match="退出码 9"):
+        run_process([sys.executable, "-c", "raise SystemExit(9)"], cwd=tmp_path, log=log)
+    content = log.read_text(encoding="utf-8")
+    assert "engine_start_requested" in content
+    assert '"exit_code": 9' in content
 
 
 def test_timeout_reaps_running_engine(tmp_path):

@@ -20,9 +20,18 @@ class EngineCancelled(EngineError):
 def run_process(command, *, cwd: Path, log: Path, progress=None, timeout=7200, env=None):
     started = time.monotonic()
     with log.open("ab") as out:
+        def record(event, **details):
+            out.write((json.dumps({"event": event, "elapsed_seconds": round(time.monotonic() - started, 3),
+                                   **details}, ensure_ascii=False) + "\n").encode("utf-8"))
+            out.flush()
         wrapped = [sys.executable, str(Path(__file__).with_name("engine_launcher.py")), str(os.getpid()), *map(str, command)]
-        process = subprocess.Popen(wrapped, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env,
-                                   start_new_session=os.name != "nt", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        record("engine_start_requested", worker_pid=os.getpid(), command=list(map(str, command)), cwd=str(cwd))
+        try:
+            process = subprocess.Popen(wrapped, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env,
+                                       start_new_session=os.name != "nt", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+        except OSError as error:
+            record("supervisor_start_failed", error=str(error))
+            raise
         try:
             while process.poll() is None:
                 if time.monotonic() - started > timeout:
@@ -30,10 +39,12 @@ def run_process(command, *, cwd: Path, log: Path, progress=None, timeout=7200, e
                 if progress:
                     progress()
                 time.sleep(.25)
+            record("engine_exited", exit_code=process.returncode)
             if process.returncode:
                 raise EngineError(f"引擎执行失败，退出码 {process.returncode}，请查看任务日志")
         finally:
             if process.poll() is None:
+                record("engine_stop_requested", supervisor_pid=process.pid)
                 if os.name == "nt":
                     process.terminate()  # Closing its Win32 job kills descendants.
                 else:
@@ -46,6 +57,7 @@ def run_process(command, *, cwd: Path, log: Path, progress=None, timeout=7200, e
                     else:
                         os.killpg(process.pid, signal.SIGKILL)
                     process.wait(timeout=5)
+                record("engine_stopped", exit_code=process.returncode)
 
 
 def probe_python(python, *, module=None, cwd=None):
