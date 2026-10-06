@@ -33,11 +33,14 @@ jobs:
         run: python -m pytest tests/dataset tests/integration tests/storage/test_locking.py tests/storage/test_directories.py -q
       - name: Real Windows installer entry and failure retention
         if: runner.os == 'Windows'
+        run: python -m pytest tests/windows -q -s --junitxml=windows-installer-results.xml
+      - name: Report Windows installer failures
+        if: always() && runner.os == 'Windows'
         run: |
-          python -m pytest tests/windows -q -s --junitxml=windows-installer-results.xml
-          $testExitCode = $LASTEXITCODE
-          python scripts/report-junit.py windows-installer-results.xml
-          exit $testExitCode
+          $env:PYTHONUTF8 = "1"
+          if (Test-Path windows-installer-results.xml) {
+            python scripts/report-junit.py windows-installer-results.xml
+          }
       - run: npm ci
         working-directory: apps/web
       - run: npm run build
