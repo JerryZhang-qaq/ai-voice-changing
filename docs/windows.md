@@ -1,6 +1,6 @@
 # Windows 原生首测指南
 
-目标环境：Windows 10/11 x64、NVIDIA RTX 40 系或更新显卡、最新兼容驱动、Python 3.12 x64。首测包自带网页，不需要 WSL2、Docker 或 Node.js。当前云机完成的是 Linux CPU 和网页验证，下面的原生 GPU 安装及训练需要在目标电脑完成首次验收。
+目标环境：Windows 10/11 x64、NVIDIA RTX 40 系或更新显卡、最新兼容驱动、Python 3.12 x64。首测包自带网页，不需要 WSL2、Docker 或 Node.js。Linux CPU、网页流程和 GitHub Actions Windows CPU 检查已经通过；原生 GPU 安装及训练需要在目标电脑完成首次验收。
 
 ## 安装与启动
 
@@ -35,7 +35,9 @@ py -3.12 scripts/install.py --engines
 
 完成资源下载、关闭工作台后运行 `GPU-Test-Windows.cmd`，实际执行 RMVPE、HuBERT、两轮 RVC 训练、FAISS、音色转换和混音。它使用生成的信号，只检查能否执行，不能测量音质。结果写入 `runtime/diagnostics/gpu-smoke.json`，每个引擎任务的日志和失败检查点仍可在工作台查看。
 
-安装失败保留命令窗口日志；任务失败查看“任务中心”的具体错误和引擎日志。显存不足降低批大小，分离可降低片段窗口/重叠；持续不稳定时先完成诊断。首测包不含训练素材和第三方权重。
+0.0.2 起，安装窗口会显示步骤和日志路径，失败后等待按键；完整安装日志保存到 `runtime/diagnostics/install-*.log`。如果使用 0.0.1 遇到双击闪退、路径被当成命令或乱码，升级到 0.0.2，或在解压目录的终端直接运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install-windows.ps1"`。
+
+任务失败查看“任务中心”的具体错误和引擎日志。显存不足降低批大小，分离可降低片段窗口/重叠；持续不稳定时先完成诊断。首测包不含训练素材和第三方权重。
 
 ## 两份真人测试数据集
 

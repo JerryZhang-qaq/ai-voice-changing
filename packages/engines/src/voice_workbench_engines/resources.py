@@ -131,7 +131,7 @@ def install_resources(store, job_id, resource_ids, *, verify_only=False, progres
                 part = work / (entry["sha256"] + ".part")
                 digest, received = hashlib.sha256(), 0
                 try:
-                    request = Request(entry["url"], headers={"User-Agent": "VoiceWorkbench/0.0.1"})
+                    request = Request(entry["url"], headers={"User-Agent": "VoiceWorkbench/0.0.2"})
                     with urlopen(request, timeout=30) as response, part.open("wb") as out:
                         while block := response.read(1024 * 1024):
                             received += len(block)

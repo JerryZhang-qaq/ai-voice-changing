@@ -117,7 +117,7 @@ class CoverRequest(BaseModel):
 
 
 def create_app(root=None, web_dir=None):
-    app = FastAPI(title="AI 翻唱工作台", version="0.0.1")
+    app = FastAPI(title="AI 翻唱工作台", version="0.0.2")
     store = ArtifactStore(root or os.environ.get("WORKBENCH_RUNTIME", "runtime"))
     app.state.store = store
 
@@ -139,7 +139,7 @@ def create_app(root=None, web_dir=None):
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "version": "0.0.1"}
+        return {"status": "ok", "version": "0.0.2"}
 
     @app.get("/api/resources")
     def resources():

@@ -1,10 +1,19 @@
 @echo off
+setlocal EnableExtensions DisableDelayedExpansion
 chcp 65001 >nul
+title VoiceWorkbench
 cd /d "%~dp0"
-if not exist .venv\Scripts\python.exe (
-  echo 请先运行 Install-Windows.cmd。
-  pause
-  exit /b 1
-)
-.venv\Scripts\python.exe scripts\launch.py
-if errorlevel 1 pause
+echo Starting VoiceWorkbench...
+if not exist "%~dp0.venv\Scripts\python.exe" goto missing
+"%~dp0.venv\Scripts\python.exe" "%~dp0scripts\launch.py"
+set "workbench_exit=%errorlevel%"
+if not "%workbench_exit%"=="0" echo [ERROR] Command failed. Exit code: %workbench_exit%
+goto finish
+:missing
+echo [ERROR] Python environment is missing. Run Install-Windows.cmd first.
+set "workbench_exit=1"
+:finish
+echo.
+echo Press any key to close this window.
+pause >nul
+exit /b %workbench_exit%

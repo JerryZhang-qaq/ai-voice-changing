@@ -21,10 +21,19 @@ def main():
             if path.suffix.lower() in {".wav", ".mp3", ".ogg", ".flac", ".pth", ".ckpt", ".pyc"}:
                 raise SystemExit(f"发行路径意外包含音频/权重：{relative}")
             files.append(path)
-    for name in ("README.md", "LICENSE", "THIRD_PARTY.md", "pyproject.toml", "requirements.lock", ".env.example", ".gitignore", ".dockerignore"):
+    for name in ("README.md", "LICENSE", "THIRD_PARTY.md", "pyproject.toml", "requirements.lock", ".env.example", ".gitignore", ".gitattributes", ".dockerignore"):
         files.append(ROOT / name)
     files.extend(ROOT.glob("*-Windows.cmd"))
-    manifest = {str(path.relative_to(ROOT)).replace("\\", "/"): {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "size": path.stat().st_size} for path in sorted(set(files))}
+    contents = {}
+    for path in sorted(set(files)):
+        relative = str(path.relative_to(ROOT)).replace("\\", "/")
+        data = path.read_bytes()
+        if path.suffix.lower() == ".cmd":
+            # CMD must receive ASCII and CRLF even when packaging on Linux.
+            data.decode("ascii")
+            data = data.replace(b"\r\n", b"\n").replace(b"\r", b"\n").replace(b"\n", b"\r\n")
+        contents[relative] = data
+    manifest = {relative: {"sha256": hashlib.sha256(data).hexdigest(), "size": len(data)} for relative, data in contents.items()}
     output = ROOT / "releases"
     output.mkdir(exist_ok=True)
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
@@ -32,7 +41,7 @@ def main():
     prefix = f"VoiceWorkbench-{version}/"
     with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for relative in manifest:
-            archive.write(ROOT / relative, prefix + relative)
+            archive.writestr(prefix + relative, contents[relative])
         archive.writestr(prefix + "RELEASE-MANIFEST.json", json.dumps(manifest, ensure_ascii=False, indent=2))
     digest = hashlib.sha256(target.read_bytes()).hexdigest()
     target.with_suffix(".zip.sha256").write_text(f"{digest}  {target.name}\n")

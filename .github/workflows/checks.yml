@@ -31,6 +31,9 @@ jobs:
       - name: Windows audio, API, locks and process ownership
         if: runner.os == 'Windows'
         run: python -m pytest tests/dataset tests/integration tests/storage/test_locking.py tests/storage/test_directories.py -q
+      - name: Real Windows installer entry and failure retention
+        if: runner.os == 'Windows'
+        run: python -m pytest tests/windows -q -s
       - run: npm ci
         working-directory: apps/web
       - run: npm run build
