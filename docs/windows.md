@@ -103,6 +103,18 @@ Windows 虚拟环境的 `python.exe` 可能经转发进程启动真正的 Python
 
 执行无报错后运行 `.\.venv\Scripts\python.exe .\scripts\launch.py`，选择原来已审查的数据集，并从预训练权重重新提交训练。基础模型和依赖环境继续复用。
 
+## 0.0.1：训练已运行，但没有导出最终模型
+
+如果日志记录了真实轮次和 G/D 检查点保存，但推理权重导出报 `RuntimeError: Parent directory assets/weights does not exist`，在程序目录执行以下命令即可创建缺少的目录，工作台可保持运行：
+
+```powershell
+New-Item -ItemType Directory -Path '.\runtime\engines\rvc\assets\weights' -Force
+```
+
+然后进入 RVC 页并刷新，选择与失败任务相同的数据集版本和采样率，在“继续训练检查点”选择该任务的训练工作目录。新的总轮数应大于原任务的目标轮数，保存间隔设为 1。例如原任务目标为 200 轮，可设为 201 轮，保留原批大小；后台会复制现有检查点和特征，并从检查点恢复训练，随后导出模型和构建索引。保留该任务的检查点缓存直至恢复完成。
+
+开发源码已在训练前自动创建这个输出目录，并提前报告目录创建失败；修正版 Release 仍待用户完成首测后发布。已保存检查点能恢复训练，不代表最终模型和音质已经验收。
+
 ## 两份真人测试数据集
 
 安装完成后，可以双击 `Prepare-Test-Datasets-Windows.cmd`，或运行 `.venv\Scripts\python.exe scripts/benchmark-dataset.py --import-workbench`，自动获取固定版本的中文 Opencpop 和日文 NIT-SONG070-F001 样本，分别登记到工作台。它们分别使用同一语料歌手，彼此不混合；为了保持测试证据清晰，初始版本均待复核。数据保存在本地，中文处理后音频不随发行包分发。完整训练需要补充更长且音域/唱法覆盖充分的素材。
