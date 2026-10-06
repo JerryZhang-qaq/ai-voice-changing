@@ -1,0 +1,49 @@
+name: Publish Windows test package
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web
+      - name: Check tag and build clean package
+        run: |
+          python - <<'PY'
+          import os, pathlib, tomllib
+          version = tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version']
+          assert os.environ['GITHUB_REF_NAME'] == f'v{version}', 'Release tag must match project version'
+          assert pathlib.Path(f'docs/releases/{version}.md').is_file(), 'Release notes missing'
+          PY
+          python scripts/package-release.py
+      - name: Upload package and publish early test release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          release_tag="${GITHUB_REF_NAME}"
+          release_version="${release_tag#v}"
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate --jq ".[] | select(.tag_name == \"${release_tag}\") | .id")"
+          if [ -z "${release_id}" ]; then
+            gh release create "${release_tag}" --repo "${GITHUB_REPOSITORY}" --verify-tag --draft --prerelease --title "${release_version} · 早期测试版" --notes-file "docs/releases/${release_version}.md"
+          fi
+          gh release upload "${release_tag}" "releases/VoiceWorkbench-${release_version}-Windows.zip" "releases/VoiceWorkbench-${release_version}-Windows.zip.sha256" --repo "${GITHUB_REPOSITORY}" --clobber
+          gh release edit "${release_tag}" --repo "${GITHUB_REPOSITORY}" --draft=false --prerelease --title "${release_version} · 早期测试版" --notes-file "docs/releases/${release_version}.md"
