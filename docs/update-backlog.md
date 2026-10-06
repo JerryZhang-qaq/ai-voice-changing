@@ -15,8 +15,11 @@
 
 ## 首测问题排查
 
-- [ ] **RVC 训练入口循环导入与日志乱码**：用户本机 RMVPE 和 HuBERT 均成功处理 6 段，随后训练入口报 `ImportError: cannot import name 'utils' from partially initialized module 'train'`。直接执行 `train/train.py` 将该目录放在模块搜索路径首位，文件遮蔽了同名 `train` 包；已在固定上游源码复现，改用 `python -m train.train` 后 CLI 参数解析正常。
-  - 排查状态：适配器已改用模块方式启动训练，特征提取入口与参数保持兼容；引擎子进程统一使用 UTF-8 和及时输出，修正 Windows 中文日志解码乱码。真实进程回归及 Windows/Linux CI 均已通过，目标电脑完整训练待重试。无需重装的覆盖方法见 [Windows 指南](windows.md)。
+- [ ] **首次训练缺少模型输出目录**：用户本机已运行 RVC GPU 训练，上传日志记录到第 185 轮并包含已保存的 G/D 检查点；每次推理权重导出均报 `RuntimeError: Parent directory assets/weights does not exist`。上游保存函数将错误转为字符串，训练最后仍可能以 0 退出，适配器随后因缺少模型将任务标为失败。
+  - 排查状态：已在真实 PyTorch 与固定上游保存函数中复现，创建目录后导出及安全读回通过。适配器已在特征提取前创建输出目录，并区分模型导出校验阶段。首个导出、目录被文件占用时提前失败、保留旧检查点继续训练的回归检查已在 Linux 通过；原生 Windows 检查待执行。用户可先创建目录，再从该任务保存的检查点继续训练。
+  - 验收：首次使用即可生成并登记推理权重及索引；输出目录问题在训练前报告；保存的检查点能继续使用。用户完整导出及翻唱听感待验证。
+- [x] **RVC 训练入口循环导入与日志乱码**：用户本机 RMVPE 和 HuBERT 均成功处理 6 段，随后训练入口报 `ImportError: cannot import name 'utils' from partially initialized module 'train'`。直接执行 `train/train.py` 将该目录放在模块搜索路径首位，文件遮蔽了同名 `train` 包；已在固定上游源码复现，改用 `python -m train.train` 后 CLI 参数解析正常。
+  - 排查状态：适配器已改用模块方式启动训练，特征提取入口与参数保持兼容；引擎子进程统一使用 UTF-8 和及时输出，修正 Windows 中文日志解码乱码。真实进程回归及 Windows/Linux CI 均已通过，用户新日志确认已进入真实训练循环且中文可读。无需重装的覆盖方法见 [Windows 指南](windows.md)。
   - 验收：模块启动能正确导入 `train.utils`，命令参数保持有效；中文日志可读，子进程退出码和清理行为正确；本机完成真实 RVC 训练后再标记完成。
 - [x] **RMVPE 阶段退出码 143 且日志为空**：用户在 Windows 原生首测中遇到任务在“RMVPE 音高提取”阶段失败，页面仅显示退出码 143 和“暂无引擎日志”。用户确认未取消任务、未关闭或重启工作台。
   - 排查状态：已在真实 Windows 虚拟环境中复现旧父进程检查在引擎启动前返回 143。修正后用实际 worker 进程句柄和 Win32 Job 检查存活、管理后代进程；新增启动/退出诊断记录。四项真实 venv 回归验证旧行为复现及修复后的启动、失败退出码、超时与父进程退出；Windows/Linux CI 均已通过。用户应用修复后，RMVPE 和 HuBERT 在本机均成功，已进入 RVC 训练入口；完整训练尚待验证。无需重装的覆盖方法见 [Windows 指南](windows.md#001rmvpe-阶段退出-143日志为空)。

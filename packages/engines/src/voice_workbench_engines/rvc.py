@@ -115,6 +115,13 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
     if not status()["training_rates"].get(rate):
         raise EngineError("此采样率的预训练 G/D 权重尚未下载")
     root, python = Path(config["rvc_root"]), config["rvc_python"]
+    exports = root / "assets" / "weights"
+    try:
+        # Upstream savee catches torch.save failures and still allows exit 0.
+        # Prepare its destination before doing expensive feature/training work.
+        exports.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        raise EngineError(f"无法创建 RVC 模型输出目录 {exports}：{error}") from error
     manifest = json.loads(store.path(dataset_id).read_text(encoding="utf-8"))
     from voice_workbench_dataset.curation import assign_split
     assign_split(manifest)
@@ -167,7 +174,9 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
         execute("train/train.py", ["-e", experiment, "-sr", rate, "-f0", 1, "-bs", batch_size, "-g", "0", "-te", epochs,
                                   "-se", save_every, "-pg", root / f"assets/pretrained_v2/f0G{rate}.pth", "-pd", root / f"assets/pretrained_v2/f0D{rate}.pth",
                                   "-l", 1, "-c", 0, "-sw", 1, "-v", "v2"], "RVC 训练", timeout=7 * 86400)
-        final = root / "assets" / "weights" / f"{experiment}.pth"
+        if progress:
+            progress("校验训练模型导出")
+        final = exports / f"{experiment}.pth"
         if not final.is_file() or final.stat().st_size == 0:
             raise EngineError("训练没有生成最终推理模型；检查点已保留")
         execute("train/train_index.py", [experiment, "v2", workspace / "indices", 4, "auto"], "FAISS 索引构建")
@@ -187,7 +196,6 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
     finally:
         # Keep all exports owned by this experiment inside its managed workspace,
         # including on cancellation/failure, so the cache page accounts for them.
-        exports = root / "assets" / "weights"
         checkpoint_dir = workspace / "inference_checkpoints"
         for candidate in [exports / f"{experiment}.pth", *exports.glob(f"{experiment}_e*_s*.pth")]:
             if candidate.is_file() and not candidate.is_symlink():
