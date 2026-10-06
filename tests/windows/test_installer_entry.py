@@ -92,8 +92,9 @@ def test_other_entries_report_missing_environment(tmp_path, name):
     assert "Press any key" in result.stdout
 
 
-def test_powershell_bootstrap_syntax():
-    source = str(ROOT / "scripts/install-windows.ps1").replace("'", "''")
+@pytest.mark.parametrize("name", ["install-windows.ps1", "windows-prerequisites.ps1"])
+def test_powershell_bootstrap_syntax(name):
+    source = str(ROOT / "scripts" / name).replace("'", "''")
     command = (
         "$tokens = $null; $errors = $null; "
         f"$null = [System.Management.Automation.Language.Parser]::ParseFile('{source}', [ref]$tokens, [ref]$errors); "

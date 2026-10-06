@@ -39,6 +39,15 @@ py -3.12 scripts/install.py --engines
 
 0.0.1 的分离引擎约束误写为 `onnxruntime-gpu==1.20.1`，会导致 `ResolutionImpossible`。将 `scripts/separation-constraints.txt` 这一行改为 `onnxruntime-gpu==1.20.2` 后重新运行安装脚本，保留已经安装的环境。
 
+如果 0.0.1 的安装器提示 Python 已安装但没有可升级版本，随后以 `-1978335189` 退出，可刷新当前 PowerShell 的 PATH，直接调用已安装的 Python：
+
+```powershell
+$env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Environment]::GetEnvironmentVariable("Path","User") + ";" + $env:Path
+& "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe" .\scripts\install.py --engines
+```
+
+上面的路径适用于默认的当前用户安装位置。0.0.2 安装器将自动检测可用的 Python 3.12 x64 路径，重新检查已安装工具。
+
 任务失败查看“任务中心”的具体错误和引擎日志。显存不足降低批大小，分离可降低片段窗口/重叠；持续不稳定时先完成诊断。首测包不含训练素材和第三方权重。
 
 ## 两份真人测试数据集
