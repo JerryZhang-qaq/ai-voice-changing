@@ -37,6 +37,8 @@ py -3.12 scripts/install.py --engines
 
 0.0.2 起，安装窗口会显示步骤和日志路径，失败后等待按键；完整安装日志保存到 `runtime/diagnostics/install-*.log`。如果使用 0.0.1 遇到双击闪退、路径被当成命令或乱码，升级到 0.0.2，或在解压目录的终端直接运行 `powershell.exe -NoProfile -ExecutionPolicy Bypass -File ".\scripts\install-windows.ps1"`。
 
+0.0.1 的分离引擎约束误写为 `onnxruntime-gpu==1.20.1`，会导致 `ResolutionImpossible`。将 `scripts/separation-constraints.txt` 这一行改为 `onnxruntime-gpu==1.20.2` 后重新运行安装脚本，保留已经安装的环境。
+
 任务失败查看“任务中心”的具体错误和引擎日志。显存不足降低批大小，分离可降低片段窗口/重叠；持续不稳定时先完成诊断。首测包不含训练素材和第三方权重。
 
 ## 两份真人测试数据集
