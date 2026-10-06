@@ -50,6 +50,33 @@ $env:Path = [Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [Env
 
 任务失败查看“任务中心”的具体错误和引擎日志。显存不足降低批大小，分离可降低片段窗口/重叠；持续不稳定时先完成诊断。首测包不含训练素材和第三方权重。
 
+## 0.0.1：RMVPE 阶段退出 143，日志为空
+
+Windows 虚拟环境的 `python.exe` 可能经转发进程启动真正的 Python 解释器。0.0.1 的监督进程直接比较父进程 PID，会将这个正常转发误判为 worker 退出，在 RMVPE 脚本运行前返回 143。修正后使用真实 worker 的进程句柄检查存活，并继续用 Win32 Job 管理子进程；日志新增启动、停止和退出码记录。
+
+先在启动工作台的窗口按 Ctrl+C，等待工作台退出。然后在原来的程序目录运行下面的 PowerShell 命令，仅替换两个引擎源码文件，并保留备份。无需重新安装依赖，数据集和基础模型可继续使用。
+
+```powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    $enginePatchBase = 'https://raw.githubusercontent.com/JerryZhang-qaq/ai-voice-changing/17dd3d5f325fbacb9d3dc2b04280364a7d4e81b4/packages/engines/src/voice_workbench_engines'
+    $enginePatchDir = '.\packages\engines\src\voice_workbench_engines'
+    $enginePatchFiles = @('engine_launcher.py', 'process.py')
+    foreach ($enginePatchFile in $enginePatchFiles) {
+        Invoke-WebRequest -UseBasicParsing -Uri "$enginePatchBase/$enginePatchFile" -OutFile "$enginePatchDir\$enginePatchFile.new"
+    }
+    foreach ($enginePatchFile in $enginePatchFiles) {
+        if (-not (Test-Path "$enginePatchDir\$enginePatchFile.backup143")) {
+            Copy-Item "$enginePatchDir\$enginePatchFile" "$enginePatchDir\$enginePatchFile.backup143"
+        }
+        Move-Item "$enginePatchDir\$enginePatchFile.new" "$enginePatchDir\$enginePatchFile" -Force
+    }
+}
+.\.venv\Scripts\python.exe .\scripts\launch.py
+```
+
+重新打开 RVC 页，选择原来已审查的数据集，选择“从预训练权重开始”，再次提交训练。旧的失败任务保留作为记录，新任务会使用修正后的启动逻辑。实际 GPU 训练仍需在目标电脑验证。
+
 ## 两份真人测试数据集
 
 安装完成后，可以双击 `Prepare-Test-Datasets-Windows.cmd`，或运行 `.venv\Scripts\python.exe scripts/benchmark-dataset.py --import-workbench`，自动获取固定版本的中文 Opencpop 和日文 NIT-SONG070-F001 样本，分别登记到工作台。它们分别使用同一语料歌手，彼此不混合；为了保持测试证据清晰，初始版本均待复核。数据保存在本地，中文处理后音频不随发行包分发。完整训练需要补充更长且音域/唱法覆盖充分的素材。
