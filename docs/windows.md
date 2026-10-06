@@ -77,6 +77,32 @@ Windows 虚拟环境的 `python.exe` 可能经转发进程启动真正的 Python
 
 重新打开 RVC 页，选择原来已审查的数据集，选择“从预训练权重开始”，再次提交训练。旧的失败任务保留作为记录，新任务会使用修正后的启动逻辑。实际 GPU 训练仍需在目标电脑验证。
 
+## 0.0.1：训练入口循环导入，退出码 1
+
+如果 RMVPE 与 HuBERT 已成功，但训练日志报 `ImportError: cannot import name 'utils' from partially initialized module 'train'`，原因是按文件路径执行 `train/train.py` 遮蔽了同名包。适配器已改用 `python -m train.train`。引擎子进程同时统一使用 UTF-8 和及时输出，解决中文日志乱码。
+
+先用 Ctrl+C 停止工作台，在原程序目录执行以下覆盖命令。该修复适用于已应用上面进程监督修复的安装，保留现有数据集与基础模型，并备份要替换的两个文件。
+
+```powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    $enginePatchBase = 'https://raw.githubusercontent.com/JerryZhang-qaq/ai-voice-changing/2cb4a49f7eee57fb80073a0b659ad32cd4371ed6/packages/engines/src/voice_workbench_engines'
+    $enginePatchDir = '.\packages\engines\src\voice_workbench_engines'
+    $enginePatchFiles = @('rvc.py', 'process.py')
+    foreach ($enginePatchFile in $enginePatchFiles) {
+        Invoke-WebRequest -UseBasicParsing -Uri "$enginePatchBase/$enginePatchFile" -OutFile "$enginePatchDir\$enginePatchFile.new"
+    }
+    foreach ($enginePatchFile in $enginePatchFiles) {
+        if (-not (Test-Path "$enginePatchDir\$enginePatchFile.backup-import")) {
+            Copy-Item "$enginePatchDir\$enginePatchFile" "$enginePatchDir\$enginePatchFile.backup-import"
+        }
+        Move-Item "$enginePatchDir\$enginePatchFile.new" "$enginePatchDir\$enginePatchFile" -Force
+    }
+}
+```
+
+执行无报错后运行 `.\.venv\Scripts\python.exe .\scripts\launch.py`，选择原来已审查的数据集，并从预训练权重重新提交训练。基础模型和依赖环境继续复用。
+
 ## 两份真人测试数据集
 
 安装完成后，可以双击 `Prepare-Test-Datasets-Windows.cmd`，或运行 `.venv\Scripts\python.exe scripts/benchmark-dataset.py --import-workbench`，自动获取固定版本的中文 Opencpop 和日文 NIT-SONG070-F001 样本，分别登记到工作台。它们分别使用同一语料歌手，彼此不混合；为了保持测试证据清晰，初始版本均待复核。数据保存在本地，中文处理后音频不随发行包分发。完整训练需要补充更长且音域/唱法覆盖充分的素材。
