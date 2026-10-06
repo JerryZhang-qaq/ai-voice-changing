@@ -43,6 +43,13 @@ def require_ready():
     return settings()
 
 
+def rvc_command(python, root: Path, script, args):
+    # Executing train/train.py by path puts train/ first on sys.path, so that
+    # file shadows the train package. Module execution keeps the RVC root first.
+    entry = ["-m", "train.train"] if script == "train/train.py" else [str(root / script)]
+    return [str(python), *entry, *map(str, args)]
+
+
 def resample_for_training(source: Path, destination: Path, rate: int):
     destination.parent.mkdir(exist_ok=True, parents=True)
     r = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(source), "-ac", "1", "-ar", str(rate), "-c:a", "pcm_f32le", "-y", str(destination)], capture_output=True, timeout=60)
@@ -136,7 +143,7 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
     def execute(script, args, stage, timeout=7200):
         if progress:
             progress(stage)
-        run_process([python, str(root / script), *map(str, args)], cwd=root, log=log, timeout=timeout, env=env,
+        run_process(rvc_command(python, root, script, args), cwd=root, log=log, timeout=timeout, env=env,
                     progress=(lambda: progress(stage)) if progress else None)
     try:
         if resume_id:

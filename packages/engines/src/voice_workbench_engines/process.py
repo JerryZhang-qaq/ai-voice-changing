@@ -19,6 +19,8 @@ class EngineCancelled(EngineError):
 
 def run_process(command, *, cwd: Path, log: Path, progress=None, timeout=7200, env=None):
     started = time.monotonic()
+    engine_env = dict(os.environ if env is None else env)
+    engine_env.update(PYTHONUTF8="1", PYTHONIOENCODING="utf-8", PYTHONUNBUFFERED="1")
     with log.open("ab") as out:
         def record(event, **details):
             out.write((json.dumps({"event": event, "elapsed_seconds": round(time.monotonic() - started, 3),
@@ -27,7 +29,7 @@ def run_process(command, *, cwd: Path, log: Path, progress=None, timeout=7200, e
         wrapped = [sys.executable, str(Path(__file__).with_name("engine_launcher.py")), str(os.getpid()), *map(str, command)]
         record("engine_start_requested", worker_pid=os.getpid(), command=list(map(str, command)), cwd=str(cwd))
         try:
-            process = subprocess.Popen(wrapped, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=env,
+            process = subprocess.Popen(wrapped, cwd=cwd, stdout=out, stderr=subprocess.STDOUT, env=engine_env,
                                        start_new_session=os.name != "nt", creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
         except OSError as error:
             record("supervisor_start_failed", error=str(error))
