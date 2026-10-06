@@ -1,0 +1,325 @@
+{
+  "quality_precision": null,
+  "quality_recall": null,
+  "limitations": [
+    "没有独立人工污染标签，不计算自动清洗准确率",
+    "未训练 RVC，不推断翻唱音质"
+  ],
+  "datasets": [
+    {
+      "language": "cn",
+      "group": {
+        "name": "Opencpop 专业中文女声",
+        "license": "CC BY-NC-ND 4.0（以官方 License 页面正文为准）",
+        "source": "https://wenet-e2e.github.io/opencpop/"
+      },
+      "sources": [
+        {
+          "name": "sample1.wav",
+          "duration": 76.75428571428571,
+          "sample_rate": 44100,
+          "sha256": "ab5b64c6b9443d8cc62e19a4ce1b645eb2e0260dc09272951d973bcc5730ee83"
+        },
+        {
+          "name": "sample2.wav",
+          "duration": 27.60342403628118,
+          "sample_rate": 44100,
+          "sha256": "d7c8fd30cdd846af55d8f095a7d76c424083fcf6a1ae51c0ae5eaf1065dc822e"
+        }
+      ],
+      "input_seconds": 104.3577097505669,
+      "processing_seconds": 1.9640664750004362,
+      "core_seconds": 94.61999999999999,
+      "summary": {
+        "clip_count": 11,
+        "review_count": 11,
+        "excluded_count": 0,
+        "accepted_count": 0,
+        "excluded_source_count": 0,
+        "near_duplicate_count": 0,
+        "cleanup_fallback_count": 0,
+        "activity_seconds": 90.97,
+        "train_count": 0,
+        "validation_count": 0
+      },
+      "lengths_seconds": [
+        9.32,
+        12.07,
+        7.69,
+        8.7,
+        7.07,
+        8.75,
+        8.26,
+        10.5,
+        7.16,
+        13.57,
+        4.75
+      ],
+      "unsafe_boundaries": 2,
+      "reason_counts": {
+        "HARMONY_CHECK_REQUIRED": 11,
+        "UNSAFE_BOUNDARY": 2
+      },
+      "manifest_id": "47ef629b8a9d43f28f963ce97af33674",
+      "controlled_damage": {
+        "gain_polarity": {
+          "version": "signal-preservation-1",
+          "task": "dereverb",
+          "calibrated": false,
+          "mode": "same_vocal",
+          "decision": "candidate",
+          "reasons": [
+            "CLEANUP_COMPARISON_UNCALIBRATED"
+          ],
+          "metrics": {
+            "duration_delta_seconds": 0.0,
+            "input_peak": 0.549560546875,
+            "output_peak": 0.2747802734375,
+            "input_clipping_ratio": 0.0,
+            "output_clipping_ratio": 0.0,
+            "input_activity_threshold_db": -52.02959360322987,
+            "input_activity_seconds": 18.76,
+            "median_level_change_db": -6.020599913279625,
+            "relative_activity_loss_fraction": 0.0,
+            "weak_activity_loss_fraction": 0.0,
+            "weak_activity_seconds": 3.44,
+            "high_band_ratio_loss_fraction": 0.0,
+            "envelope_alignment": {
+              "status": "estimated",
+              "lag_seconds": 0.0,
+              "correlation": 1.0,
+              "zero_lag_correlation": 1.0
+            }
+          }
+        },
+        "signal_collapse": {
+          "version": "signal-preservation-1",
+          "task": "dereverb",
+          "calibrated": false,
+          "mode": "same_vocal",
+          "decision": "fallback_input",
+          "reasons": [
+            "CLEANUP_COMPARISON_UNCALIBRATED",
+            "CLEANUP_SIGNAL_COLLAPSE",
+            "CLEANUP_FALLBACK_REQUIRES_REVIEW"
+          ],
+          "metrics": {
+            "duration_delta_seconds": 0.0,
+            "input_peak": 0.549560546875,
+            "output_peak": 0.0,
+            "input_clipping_ratio": 0.0,
+            "output_clipping_ratio": 0.0,
+            "input_activity_threshold_db": -52.02959360322987,
+            "input_activity_seconds": 18.76,
+            "median_level_change_db": -117.73468969986877,
+            "relative_activity_loss_fraction": 0.0,
+            "weak_activity_loss_fraction": 0.0,
+            "weak_activity_seconds": 3.44,
+            "high_band_ratio_loss_fraction": 0.06407035175879397,
+            "envelope_alignment": {
+              "status": "insufficient_variation"
+            }
+          }
+        },
+        "partial_erasure": {
+          "version": "signal-preservation-1",
+          "task": "denoise",
+          "calibrated": false,
+          "mode": "same_vocal",
+          "decision": "candidate",
+          "reasons": [
+            "CLEANUP_COMPARISON_UNCALIBRATED",
+            "POSSIBLE_ACTIVITY_DAMAGE"
+          ],
+          "metrics": {
+            "duration_delta_seconds": 0.0,
+            "input_peak": 0.549560546875,
+            "output_peak": 0.549560546875,
+            "input_clipping_ratio": 0.0,
+            "output_clipping_ratio": 0.0,
+            "input_activity_threshold_db": -52.02959360322987,
+            "input_activity_seconds": 18.76,
+            "median_level_change_db": 0.0,
+            "relative_activity_loss_fraction": 0.1535181236673774,
+            "weak_activity_loss_fraction": 0.18023255813953487,
+            "weak_activity_seconds": 3.44,
+            "high_band_ratio_loss_fraction": 0.008793969849246231,
+            "envelope_alignment": {
+              "status": "estimated",
+              "lag_seconds": 0.0,
+              "correlation": 0.5704747151559678,
+              "zero_lag_correlation": 0.5704747151559678
+            }
+          }
+        }
+      }
+    },
+    {
+      "language": "jp",
+      "group": {
+        "name": "NIT-SONG070-F001 日本女声",
+        "license": "CC BY 3.0",
+        "attribution": "Nagoya Institute of Technology, Department of Computer Science, 2004–2015; HTS Working Group",
+        "source": "https://github.com/nnsvs/nnsvs/tree/4415519486422e01df875f2a8afd69aed76286dc/tests/data"
+      },
+      "sources": [
+        {
+          "name": "nitech_jp_song070_f001_004.wav",
+          "duration": 31.1999375,
+          "sample_rate": 48000,
+          "sha256": "175bb8e0c832d5348f95f36a5597d34e244a51d7f0735ef255dd77a1bcb27444"
+        },
+        {
+          "name": "nitech_jp_song070_f001_007.wav",
+          "duration": 43.1999375,
+          "sample_rate": 48000,
+          "sha256": "1fe84d649a23eed8882fc082752c821c8dac66dfc51cde6ccf12e2df9ef9edac"
+        },
+        {
+          "name": "nitech_jp_song070_f001_010.wav",
+          "duration": 62.400020833333336,
+          "sample_rate": 48000,
+          "sha256": "4d0c3fbf9e470d620101b10f01b702170afe32121d04b63fb4e0389460b59ffb"
+        }
+      ],
+      "input_seconds": 136.79989583333332,
+      "processing_seconds": 2.5021375910000643,
+      "core_seconds": 115.16,
+      "summary": {
+        "clip_count": 22,
+        "review_count": 22,
+        "excluded_count": 0,
+        "accepted_count": 0,
+        "excluded_source_count": 0,
+        "near_duplicate_count": 0,
+        "cleanup_fallback_count": 0,
+        "activity_seconds": 108.93,
+        "train_count": 0,
+        "validation_count": 0
+      },
+      "lengths_seconds": [
+        0.58,
+        1.82,
+        2.21,
+        4.65,
+        4.58,
+        0.56,
+        0.58,
+        1.15,
+        2.3,
+        4.67,
+        4.95,
+        9.16,
+        9.23,
+        9.11,
+        9.75,
+        5.17,
+        4.2,
+        9.21,
+        9.5,
+        9.19,
+        9.39,
+        9.8
+      ],
+      "unsafe_boundaries": 0,
+      "reason_counts": {
+        "SHORT_CLIP": 6,
+        "VOCAL_CONTENT_UNCERTAIN": 3,
+        "HARMONY_CHECK_REQUIRED": 22
+      },
+      "manifest_id": "9eceee3e5579415baa4d4857044aec21",
+      "controlled_damage": {
+        "gain_polarity": {
+          "version": "signal-preservation-1",
+          "task": "dereverb",
+          "calibrated": false,
+          "mode": "same_vocal",
+          "decision": "candidate",
+          "reasons": [
+            "CLEANUP_COMPARISON_UNCALIBRATED"
+          ],
+          "metrics": {
+            "duration_delta_seconds": 0.0,
+            "input_peak": 0.867828369140625,
+            "output_peak": 0.4339141845703125,
+            "input_clipping_ratio": 0.0,
+            "output_clipping_ratio": 0.0,
+            "input_activity_threshold_db": -48.183626550493116,
+            "input_activity_seconds": 13.98,
+            "median_level_change_db": -6.020599913279625,
+            "relative_activity_loss_fraction": 0.0,
+            "weak_activity_loss_fraction": 0.0,
+            "weak_activity_seconds": 7.28,
+            "high_band_ratio_loss_fraction": 0.0,
+            "envelope_alignment": {
+              "status": "estimated",
+              "lag_seconds": 0.0,
+              "correlation": 1.0,
+              "zero_lag_correlation": 1.0
+            }
+          }
+        },
+        "signal_collapse": {
+          "version": "signal-preservation-1",
+          "task": "dereverb",
+          "calibrated": false,
+          "mode": "same_vocal",
+          "decision": "fallback_input",
+          "reasons": [
+            "CLEANUP_COMPARISON_UNCALIBRATED",
+            "CLEANUP_SIGNAL_COLLAPSE",
+            "CLEANUP_FALLBACK_REQUIRES_REVIEW"
+          ],
+          "metrics": {
+            "duration_delta_seconds": 0.0,
+            "input_peak": 0.867828369140625,
+            "output_peak": 0.0,
+            "input_clipping_ratio": 0.0,
+            "output_clipping_ratio": 0.0,
+            "input_activity_threshold_db": -48.183626550493116,
+            "input_activity_seconds": 13.98,
+            "median_level_change_db": -119.29942491808472,
+            "relative_activity_loss_fraction": 0.0,
+            "weak_activity_loss_fraction": 0.0,
+            "weak_activity_seconds": 7.28,
+            "high_band_ratio_loss_fraction": 0.011194029850746268,
+            "envelope_alignment": {
+              "status": "insufficient_variation"
+            }
+          }
+        },
+        "partial_erasure": {
+          "version": "signal-preservation-1",
+          "task": "denoise",
+          "calibrated": false,
+          "mode": "same_vocal",
+          "decision": "candidate",
+          "reasons": [
+            "CLEANUP_COMPARISON_UNCALIBRATED",
+            "POSSIBLE_ACTIVITY_DAMAGE"
+          ],
+          "metrics": {
+            "duration_delta_seconds": 0.0,
+            "input_peak": 0.867828369140625,
+            "output_peak": 0.867828369140625,
+            "input_clipping_ratio": 0.0,
+            "output_clipping_ratio": 0.0,
+            "input_activity_threshold_db": -48.183626550493116,
+            "input_activity_seconds": 13.98,
+            "median_level_change_db": 0.0,
+            "relative_activity_loss_fraction": 0.2317596566523605,
+            "weak_activity_loss_fraction": 0.06593406593406594,
+            "weak_activity_seconds": 7.28,
+            "high_band_ratio_loss_fraction": 0.011194029850746268,
+            "envelope_alignment": {
+              "status": "estimated",
+              "lag_seconds": 0.0,
+              "correlation": 0.6014116828270664,
+              "zero_lag_correlation": 0.6014116828270664
+            }
+          }
+        }
+      }
+    }
+  ]
+}

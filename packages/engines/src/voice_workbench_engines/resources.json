@@ -1,0 +1,193 @@
+{
+  "schema_version": 1,
+  "resources": [
+    {
+      "id": "rvc_base",
+      "name": "RVC 基础分析模型",
+      "root": "rvc_root",
+      "license": "MIT（上游模型仓库声明）",
+      "source": "https://huggingface.co/lj1995/VoiceConversionWebUI",
+      "revision": "e6d0c1a17da07c33557852f9dfa2bd44cc75737d",
+      "files": [
+        {
+          "path": "assets/hubert_base/config.json",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/hubert_base/config.json",
+          "sha256": "0346950779dfb7f9316fa74ed846e2b8a22a08eedfdc5387b73f327cb1a4a7cf",
+          "size": 1492
+        },
+        {
+          "path": "assets/hubert_base/preprocessor_config.json",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/hubert_base/preprocessor_config.json",
+          "sha256": "7c1976a680fb7acc757cd36fb08eef878fa36c70b4c9d2d595df9c608bbbbf0e",
+          "size": 225
+        },
+        {
+          "path": "assets/hubert_base/pytorch_model.bin",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/hubert_base/pytorch_model.bin",
+          "sha256": "cc8c20f4b90a520757260197a3ff2505705a7adbd20ad9eeaa4e1a9b38442ef5",
+          "size": 189206711
+        },
+        {
+          "path": "assets/rmvpe/rmvpe.pt",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/rmvpe.pt",
+          "sha256": "6d62215f4306e3ca278246188607209f09af3dc77ed4232efdd069798c4ec193",
+          "size": 181184272
+        }
+      ]
+    },
+    {
+      "id": "rvc_32k",
+      "name": "RVC 32k 预训练底模",
+      "root": "rvc_root",
+      "license": "MIT（上游模型仓库声明）",
+      "source": "https://huggingface.co/lj1995/VoiceConversionWebUI",
+      "revision": "e6d0c1a17da07c33557852f9dfa2bd44cc75737d",
+      "files": [
+        {
+          "path": "assets/pretrained_v2/f0G32k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0G32k.pth",
+          "sha256": "2332611297b8d88c7436de8f17ef5f07a2119353e962cd93cda5806d59a1133d",
+          "size": 73950049
+        },
+        {
+          "path": "assets/pretrained_v2/f0D32k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0D32k.pth",
+          "sha256": "bd7134e7793674c85474d5145d2d982e3c5d8124fc7bb6c20f710ed65808fa8a",
+          "size": 142875703
+        }
+      ]
+    },
+    {
+      "id": "rvc_40k",
+      "name": "RVC 40k 预训练底模",
+      "root": "rvc_root",
+      "license": "MIT（上游模型仓库声明）",
+      "source": "https://huggingface.co/lj1995/VoiceConversionWebUI",
+      "revision": "e6d0c1a17da07c33557852f9dfa2bd44cc75737d",
+      "files": [
+        {
+          "path": "assets/pretrained_v2/f0G40k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0G40k.pth",
+          "sha256": "3b2c44035e782c4b14ddc0bede9e2f4a724d025cd073f736d4f43708453adfcb",
+          "size": 73106273
+        },
+        {
+          "path": "assets/pretrained_v2/f0D40k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0D40k.pth",
+          "sha256": "6b6ab091e70801b28e3f41f335f2fc5f3f35c75b39ae2628d419644ec2b0fa09",
+          "size": 142875703
+        }
+      ]
+    },
+    {
+      "id": "rvc_48k",
+      "name": "RVC 48k 预训练底模",
+      "root": "rvc_root",
+      "license": "MIT（上游模型仓库声明）",
+      "source": "https://huggingface.co/lj1995/VoiceConversionWebUI",
+      "revision": "e6d0c1a17da07c33557852f9dfa2bd44cc75737d",
+      "files": [
+        {
+          "path": "assets/pretrained_v2/f0G48k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0G48k.pth",
+          "sha256": "b5d51f589cc3632d4eae36a315b4179397695042edc01d15312e1bddc2b764a4",
+          "size": 75465569
+        },
+        {
+          "path": "assets/pretrained_v2/f0D48k.pth",
+          "url": "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/e6d0c1a17da07c33557852f9dfa2bd44cc75737d/pretrained_v2/f0D48k.pth",
+          "sha256": "2269b73c7a4cf34da09aea99274dabf99b2ddb8a42cbfb065fb3c0aa9a2fc748",
+          "size": 142875703
+        }
+      ]
+    },
+    {
+      "id": "vocals_melband_unwa",
+      "name": "MelBand RoFormer · unwa FT3",
+      "root": "separation_models",
+      "license": "以权重发布者说明为准；测试包不附带权重",
+      "source": "https://github.com/nomadkaraoke/python-audio-separator",
+      "revision": "model-configs / SHA-256 固定内容",
+      "files": [
+        {
+          "path": "mel_band_roformer_kim_ft3_unwa.ckpt",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/mel_band_roformer_kim_ft3_unwa.ckpt",
+          "sha256": "1b10db0095c42576a32aeb3a1c8054af9dea0333e1c38477091d78316a007e52",
+          "size": 913090472
+        },
+        {
+          "path": "config_mel_band_roformer_kim_ft_unwa.yaml",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/config_mel_band_roformer_kim_ft_unwa.yaml",
+          "sha256": "c910a0b1493fd3f9cee7a576a7498e44e660510dcaaf5d0d50d5363dde1d0010",
+          "size": 1721
+        }
+      ]
+    },
+    {
+      "id": "lead_melband_aufr33",
+      "name": "MelBand RoFormer · aufr33/viperx Karaoke",
+      "root": "separation_models",
+      "license": "以权重发布者说明为准；测试包不附带权重",
+      "source": "https://github.com/nomadkaraoke/python-audio-separator",
+      "revision": "model-configs / SHA-256 固定内容",
+      "files": [
+        {
+          "path": "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956.ckpt",
+          "sha256": "1de20d459332fe8869aeb01327a31df0032262706e1365114e852dc271779813",
+          "size": 913096801
+        },
+        {
+          "path": "mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956_config.yaml",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/mel_band_roformer_karaoke_aufr33_viperx_sdr_10.1956_config.yaml",
+          "sha256": "b35077d94861f068097cce1a5e54633c055e7dcc2613eade4e4dc7c7c9c3f48b",
+          "size": 1726
+        }
+      ]
+    },
+    {
+      "id": "dereverb_melband_anvuew",
+      "name": "MelBand RoFormer · anvuew 温和去混响",
+      "root": "separation_models",
+      "license": "以权重发布者说明为准；测试包不附带权重",
+      "source": "https://github.com/nomadkaraoke/python-audio-separator",
+      "revision": "model-configs / SHA-256 固定内容",
+      "files": [
+        {
+          "path": "dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/dereverb_mel_band_roformer_less_aggressive_anvuew_sdr_18.8050.ckpt",
+          "sha256": "0db8f1b41c00cead1112e967262a12802fd32e76c0c3a8eb207e772bae25d07b",
+          "size": 913107578
+        },
+        {
+          "path": "dereverb_mel_band_roformer_anvuew.yaml",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/dereverb_mel_band_roformer_anvuew.yaml",
+          "sha256": "1599d9ea717ea2b5b3bc55d936f752b8d0f67baaa3de95acd6d03259a2f37784",
+          "size": 1846
+        }
+      ]
+    },
+    {
+      "id": "denoise_melband_aufr33",
+      "name": "MelBand RoFormer · aufr33 降噪",
+      "root": "separation_models",
+      "license": "以权重发布者说明为准；测试包不附带权重",
+      "source": "https://github.com/nomadkaraoke/python-audio-separator",
+      "revision": "model-configs / SHA-256 固定内容",
+      "files": [
+        {
+          "path": "denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/denoise_mel_band_roformer_aufr33_sdr_27.9959.ckpt",
+          "sha256": "7c1c39191edc34e942ca7f2346ce6b6c0e1208a5f76349ffce6f696bd12910de",
+          "size": 913097300
+        },
+        {
+          "path": "denoise_mel_band_roformer_aufr33_sdr_27.9959_config.yaml",
+          "url": "https://github.com/nomadkaraoke/python-audio-separator/releases/download/model-configs/denoise_mel_band_roformer_aufr33_sdr_27.9959_config.yaml",
+          "sha256": "5d7d83b2e9d232da60941b717b0abdc345155d45cff3f79715cdb2790ba18c36",
+          "size": 1621
+        }
+      ]
+    }
+  ]
+}

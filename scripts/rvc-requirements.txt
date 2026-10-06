@@ -1,0 +1,16 @@
+# Core modules used by the pinned RVC train/infer CLI; upstream GUI excluded.
+setuptools==80.9.0
+numpy==1.26.4
+av==15.1.0
+ffmpeg-python==0.2.0
+faiss-cpu==1.13.2
+librosa==0.10.2.post1
+scipy==1.15.3
+soundfile==0.13.1
+scikit-learn==1.6.1
+praat-parselmouth==0.4.6
+tensorboard==2.19.0
+matplotlib==3.10.3
+transformers==4.49.0
+torchfcpe==0.0.4
+tqdm==4.67.1

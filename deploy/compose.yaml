@@ -1,0 +1,35 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: ["../runtime:/app/runtime"]
+    restart: unless-stopped
+    environment:
+      WORKBENCH_RUNTIME: /app/runtime
+      RVC_ROOT: /app/runtime/engines/rvc
+      RVC_PYTHON: /app/runtime/venvs/rvc/bin/python
+      SEPARATION_PYTHON: /app/runtime/venvs/separation/bin/python
+      SEPARATION_MODELS: /app/runtime/models/separation
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: ["python", "-m", "voice_workbench_worker"]
+    volumes: ["../runtime:/app/runtime"]
+    restart: unless-stopped
+    shm_size: 2gb
+    environment:
+      WORKBENCH_RUNTIME: /app/runtime
+      RVC_ROOT: /app/runtime/engines/rvc
+      RVC_PYTHON: /app/runtime/venvs/rvc/bin/python
+      SEPARATION_PYTHON: /app/runtime/venvs/separation/bin/python
+      SEPARATION_MODELS: /app/runtime/models/separation
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

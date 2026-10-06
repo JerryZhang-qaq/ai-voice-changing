@@ -1,0 +1,405 @@
+{
+  "device": "cpu",
+  "torch": "2.7.1+cpu",
+  "audio_separator": "0.47.0",
+  "segment_size": 128,
+  "overlap": 2,
+  "limitations": [
+    "短片段执行检查，不代表整套歌曲质量",
+    "参数低于产品默认重叠，未进行盲听或阈值校准"
+  ],
+  "runs": [
+    {
+      "model_id": "vocals_melband_unwa",
+      "seconds": 63.06032890499955,
+      "input": "/tmp/workbench-engine-benchmark/cn/master.wav",
+      "outputs": {
+        "instrumental": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "vocals": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "paired_dry_comparison": {
+        "version": "signal-preservation-1",
+        "task": "dereverb",
+        "calibrated": false,
+        "mode": "same_vocal",
+        "decision": "candidate",
+        "reasons": [
+          "CLEANUP_COMPARISON_UNCALIBRATED"
+        ],
+        "metrics": {
+          "duration_delta_seconds": 0.0,
+          "input_peak": 0.5250543355941772,
+          "output_peak": 0.6587021946907043,
+          "input_clipping_ratio": 0.0,
+          "output_clipping_ratio": 0.0,
+          "input_activity_threshold_db": -51.84400288357847,
+          "input_activity_seconds": 7.66,
+          "median_level_change_db": 5.873719209703154,
+          "relative_activity_loss_fraction": 0.0,
+          "weak_activity_loss_fraction": 0.0,
+          "weak_activity_seconds": 1.3,
+          "high_band_ratio_loss_fraction": 0.011834319526627219,
+          "envelope_alignment": {
+            "status": "estimated",
+            "lag_seconds": -0.02,
+            "correlation": 0.9444957216166968,
+            "zero_lag_correlation": 0.8700174091508938
+          }
+        }
+      }
+    },
+    {
+      "model_id": "lead_melband_aufr33",
+      "seconds": 51.31711699200059,
+      "input": "/tmp/workbench-engine-benchmark/cn/vocals/vocals.wav",
+      "outputs": {
+        "backing": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "lead": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "harmony_screen": {
+        "version": "lead-backing-overlap-1",
+        "status": "passed",
+        "reasons": [],
+        "calibrated_on_real_harmonies": false,
+        "metrics": {
+          "lead_voiced_seconds": 6.66,
+          "independent_overlap_seconds": 0.0,
+          "independent_overlap_fraction": 0.0,
+          "longest_overlap_seconds": 0.0,
+          "significant_backing_seconds": 0.06,
+          "median_backing_to_lead_db": -38.21533562687012
+        },
+        "intervals": []
+      }
+    },
+    {
+      "model_id": "dereverb_melband_anvuew",
+      "seconds": 53.68063053199876,
+      "input": "/tmp/workbench-engine-benchmark/cn/vocals/vocals.wav",
+      "outputs": {
+        "reverb": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "dry": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "preservation": {
+        "version": "signal-preservation-1",
+        "task": "dereverb",
+        "calibrated": false,
+        "mode": "same_vocal",
+        "decision": "candidate",
+        "reasons": [
+          "CLEANUP_COMPARISON_UNCALIBRATED",
+          "WEAK_ACTIVITY_LOSS"
+        ],
+        "metrics": {
+          "duration_delta_seconds": 0.0,
+          "input_peak": 0.6587021946907043,
+          "output_peak": 0.6507104635238647,
+          "input_clipping_ratio": 0.0,
+          "output_clipping_ratio": 0.0,
+          "input_activity_threshold_db": -48.69157398780301,
+          "input_activity_seconds": 8.0,
+          "median_level_change_db": -0.16539261000835648,
+          "relative_activity_loss_fraction": 0.0275,
+          "weak_activity_loss_fraction": 0.275,
+          "weak_activity_seconds": 0.8,
+          "high_band_ratio_loss_fraction": 0.013227513227513227,
+          "envelope_alignment": {
+            "status": "estimated",
+            "lag_seconds": 0.0,
+            "correlation": 0.927324136501222,
+            "zero_lag_correlation": 0.927324136501222
+          }
+        }
+      }
+    },
+    {
+      "model_id": "denoise_melband_aufr33",
+      "seconds": 54.642804595998314,
+      "input": "/tmp/workbench-engine-benchmark/cn/vocals/vocals.wav",
+      "outputs": {
+        "noise": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "clean": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "preservation": {
+        "version": "signal-preservation-1",
+        "task": "denoise",
+        "calibrated": false,
+        "mode": "same_vocal",
+        "decision": "candidate",
+        "reasons": [
+          "CLEANUP_COMPARISON_UNCALIBRATED"
+        ],
+        "metrics": {
+          "duration_delta_seconds": 0.0,
+          "input_peak": 0.6587021946907043,
+          "output_peak": 0.6585985422134399,
+          "input_clipping_ratio": 0.0,
+          "output_clipping_ratio": 0.0,
+          "input_activity_threshold_db": -48.69157398780301,
+          "input_activity_seconds": 8.0,
+          "median_level_change_db": -0.00018171754569351606,
+          "relative_activity_loss_fraction": 0.0,
+          "weak_activity_loss_fraction": 0.0,
+          "weak_activity_seconds": 0.8,
+          "high_band_ratio_loss_fraction": 0.0,
+          "envelope_alignment": {
+            "status": "estimated",
+            "lag_seconds": 0.0,
+            "correlation": 0.9999984171102324,
+            "zero_lag_correlation": 0.9999984171102324
+          }
+        }
+      }
+    },
+    {
+      "model_id": "lead_melband_aufr33",
+      "seconds": 50.8128674719992,
+      "input": "/tmp/workbench-engine-benchmark/jp/master.wav",
+      "outputs": {
+        "backing": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "lead": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "harmony_screen": {
+        "version": "lead-backing-overlap-1",
+        "status": "passed",
+        "reasons": [],
+        "calibrated_on_real_harmonies": false,
+        "metrics": {
+          "lead_voiced_seconds": 7.7,
+          "independent_overlap_seconds": 0.0,
+          "independent_overlap_fraction": 0.0,
+          "longest_overlap_seconds": 0.0,
+          "significant_backing_seconds": 0.18,
+          "median_backing_to_lead_db": -40.896410610659714
+        },
+        "intervals": []
+      }
+    },
+    {
+      "model_id": "dereverb_melband_anvuew",
+      "seconds": 53.324514794001516,
+      "input": "/tmp/workbench-engine-benchmark/jp/master.wav",
+      "outputs": {
+        "reverb": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "dry": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "preservation": {
+        "version": "signal-preservation-1",
+        "task": "dereverb",
+        "calibrated": false,
+        "mode": "same_vocal",
+        "decision": "candidate",
+        "reasons": [
+          "CLEANUP_COMPARISON_UNCALIBRATED"
+        ],
+        "metrics": {
+          "duration_delta_seconds": 0.0,
+          "input_peak": 0.13458251953125,
+          "output_peak": 0.13455574214458466,
+          "input_clipping_ratio": 0.0,
+          "output_clipping_ratio": 0.0,
+          "input_activity_threshold_db": -60.0,
+          "input_activity_seconds": 7.5200000000000005,
+          "median_level_change_db": -0.0004512692063602941,
+          "relative_activity_loss_fraction": 0.0,
+          "weak_activity_loss_fraction": 0.0,
+          "weak_activity_seconds": 0.9400000000000001,
+          "high_band_ratio_loss_fraction": 0.0,
+          "envelope_alignment": {
+            "status": "estimated",
+            "lag_seconds": 0.0,
+            "correlation": 0.9999979306925882,
+            "zero_lag_correlation": 0.9999979306925882
+          }
+        }
+      }
+    },
+    {
+      "model_id": "denoise_melband_aufr33",
+      "seconds": 45.7908048219997,
+      "input": "/tmp/workbench-engine-benchmark/jp/master.wav",
+      "outputs": {
+        "noise": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "clean": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "preservation": {
+        "version": "signal-preservation-1",
+        "task": "denoise",
+        "calibrated": false,
+        "mode": "same_vocal",
+        "decision": "candidate",
+        "reasons": [
+          "CLEANUP_COMPARISON_UNCALIBRATED"
+        ],
+        "metrics": {
+          "duration_delta_seconds": 0.0,
+          "input_peak": 0.13458251953125,
+          "output_peak": 0.13454429805278778,
+          "input_clipping_ratio": 0.0,
+          "output_clipping_ratio": 0.0,
+          "input_activity_threshold_db": -60.0,
+          "input_activity_seconds": 7.5200000000000005,
+          "median_level_change_db": -0.0007831275069509758,
+          "relative_activity_loss_fraction": 0.0,
+          "weak_activity_loss_fraction": 0.0,
+          "weak_activity_seconds": 0.9400000000000001,
+          "high_band_ratio_loss_fraction": 0.0,
+          "envelope_alignment": {
+            "status": "estimated",
+            "lag_seconds": 0.0,
+            "correlation": 0.9999895795478296,
+            "zero_lag_correlation": 0.9999895795478296
+          }
+        }
+      }
+    },
+    {
+      "model_id": "lead_melband_aufr33",
+      "seconds": 55.719336019001275,
+      "input": "/tmp/workbench-engine-benchmark/controlled-overlap/two-real-singers.wav",
+      "outputs": {
+        "backing": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        },
+        "lead": {
+          "duration": 8.0,
+          "frames": 352800,
+          "sample_rate": 44100
+        }
+      },
+      "harmony_screen": {
+        "version": "lead-backing-overlap-1",
+        "status": "rejected",
+        "reasons": [
+          "COMPLEX_HARMONY"
+        ],
+        "calibrated_on_real_harmonies": false,
+        "metrics": {
+          "lead_voiced_seconds": 6.78,
+          "independent_overlap_seconds": 4.12,
+          "independent_overlap_fraction": 0.6076696165191741,
+          "longest_overlap_seconds": 0.46,
+          "significant_backing_seconds": 7.5200000000000005,
+          "median_backing_to_lead_db": 5.111231147808226
+        },
+        "intervals": [
+          {
+            "start": 0.36,
+            "end": 0.54
+          },
+          {
+            "start": 1.36,
+            "end": 1.58
+          },
+          {
+            "start": 1.74,
+            "end": 1.84
+          },
+          {
+            "start": 1.86,
+            "end": 2.3000000000000003
+          },
+          {
+            "start": 2.56,
+            "end": 2.96
+          },
+          {
+            "start": 3.56,
+            "end": 3.66
+          },
+          {
+            "start": 4.58,
+            "end": 4.78
+          },
+          {
+            "start": 4.84,
+            "end": 5.08
+          },
+          {
+            "start": 5.4,
+            "end": 5.86
+          },
+          {
+            "start": 6.1000000000000005,
+            "end": 6.22
+          },
+          {
+            "start": 6.3,
+            "end": 6.58
+          },
+          {
+            "start": 6.98,
+            "end": 7.24
+          },
+          {
+            "start": 7.32,
+            "end": 7.5600000000000005
+          },
+          {
+            "start": 7.62,
+            "end": 8.0
+          }
+        ]
+      },
+      "known_label": "controlled_two_real_singers_overlap"
+    }
+  ]
+}

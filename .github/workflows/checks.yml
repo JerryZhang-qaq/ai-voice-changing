@@ -1,0 +1,37 @@
+name: CPU and native Windows checks
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: FFmpeg on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: FFmpeg on Windows
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - run: python -m pip install setuptools==80.9.0 wheel==0.45.1
+      - run: python -m pip install -r requirements.lock
+      - run: python -m pip install --no-build-isolation --no-deps -e .
+      - name: Full Linux suite
+        if: runner.os == 'Linux'
+        run: python -m pytest -q
+      - name: Windows audio, API, locks and process ownership
+        if: runner.os == 'Windows'
+        run: python -m pytest tests/dataset tests/integration tests/storage/test_locking.py tests/storage/test_directories.py -q
+      - run: npm ci
+        working-directory: apps/web
+      - run: npm run build
+        working-directory: apps/web

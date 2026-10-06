@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=80,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "voice-workbench"
+version = "0.0.1"
+description = "Self-hosted RVC cover and dataset workbench"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi==0.142.2",
+  "uvicorn==0.54.0",
+  "numpy==2.2.6",
+  "soundfile==0.13.1",
+  "python-multipart==0.0.22",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1", "httpx==0.28.1"]
+
+[tool.setuptools.packages.find]
+where = ["packages/storage/src", "packages/dataset/src", "packages/audio/src", "packages/engines/src", "services/api/src", "services/worker/src"]
+include = ["voice_workbench*"]
+
+[tool.setuptools.package-data]
+voice_workbench_engines = ["resources.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["packages/storage/src", "packages/dataset/src", "packages/audio/src", "packages/engines/src", "services/api/src", "services/worker/src"]

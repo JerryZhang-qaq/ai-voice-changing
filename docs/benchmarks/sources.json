@@ -1,0 +1,85 @@
+{
+  "notice": "官方公开真人录音样本，仅用于本地非商业测试；中文衍生数据不随程序分发。",
+  "groups": {
+    "cn": {
+      "name": "Opencpop 专业中文女声",
+      "license": "CC BY-NC-ND 4.0（以官方 License 页面正文为准）",
+      "source": "https://wenet-e2e.github.io/opencpop/"
+    },
+    "jp": {
+      "name": "NIT-SONG070-F001 日本女声",
+      "license": "CC BY 3.0",
+      "attribution": "Nagoya Institute of Technology, Department of Computer Science, 2004–2015; HTS Working Group",
+      "source": "https://github.com/nnsvs/nnsvs/tree/4415519486422e01df875f2a8afd69aed76286dc/tests/data"
+    }
+  },
+  "files": [
+    {
+      "language": "cn",
+      "repo": "wenet-e2e/opencpop",
+      "revision": "f470bea3c5b0e869279b33745c56f9e35e61c94e",
+      "path": "audio/sample1.wav",
+      "url": "https://raw.githubusercontent.com/wenet-e2e/opencpop/f470bea3c5b0e869279b33745c56f9e35e61c94e/audio/sample1.wav",
+      "sha256": "ab5b64c6b9443d8cc62e19a4ce1b645eb2e0260dc09272951d973bcc5730ee83",
+      "size": 6775502
+    },
+    {
+      "language": "cn",
+      "repo": "wenet-e2e/opencpop",
+      "revision": "f470bea3c5b0e869279b33745c56f9e35e61c94e",
+      "path": "audio/sample2.wav",
+      "url": "https://raw.githubusercontent.com/wenet-e2e/opencpop/f470bea3c5b0e869279b33745c56f9e35e61c94e/audio/sample2.wav",
+      "sha256": "d7c8fd30cdd846af55d8f095a7d76c424083fcf6a1ae51c0ae5eaf1065dc822e",
+      "size": 2440396
+    },
+    {
+      "language": "jp",
+      "repo": "nnsvs/nnsvs",
+      "revision": "4415519486422e01df875f2a8afd69aed76286dc",
+      "path": "tests/data/nitech_jp_song070_f001_004.wav",
+      "url": "https://raw.githubusercontent.com/nnsvs/nnsvs/4415519486422e01df875f2a8afd69aed76286dc/tests/data/nitech_jp_song070_f001_004.wav",
+      "sha256": "175bb8e0c832d5348f95f36a5597d34e244a51d7f0735ef255dd77a1bcb27444",
+      "size": 2995238
+    },
+    {
+      "language": "jp",
+      "repo": "nnsvs/nnsvs",
+      "revision": "4415519486422e01df875f2a8afd69aed76286dc",
+      "path": "tests/data/wav/nitech_jp_song070_f001_007.wav",
+      "url": "https://raw.githubusercontent.com/nnsvs/nnsvs/4415519486422e01df875f2a8afd69aed76286dc/tests/data/wav/nitech_jp_song070_f001_007.wav",
+      "sha256": "1fe84d649a23eed8882fc082752c821c8dac66dfc51cde6ccf12e2df9ef9edac",
+      "size": 4147238
+    },
+    {
+      "language": "jp",
+      "repo": "nnsvs/nnsvs",
+      "revision": "4415519486422e01df875f2a8afd69aed76286dc",
+      "path": "tests/data/wav/nitech_jp_song070_f001_010.wav",
+      "url": "https://raw.githubusercontent.com/nnsvs/nnsvs/4415519486422e01df875f2a8afd69aed76286dc/tests/data/wav/nitech_jp_song070_f001_010.wav",
+      "sha256": "4d0c3fbf9e470d620101b10f01b702170afe32121d04b63fb4e0389460b59ffb",
+      "size": 5990446
+    },
+    {
+      "language": "cn",
+      "repo": "wenet-e2e/opencpop",
+      "revision": "f470bea3c5b0e869279b33745c56f9e35e61c94e",
+      "path": "audio/Sample1_Mixed.wav",
+      "url": "https://raw.githubusercontent.com/wenet-e2e/opencpop/f470bea3c5b0e869279b33745c56f9e35e61c94e/audio/Sample1_Mixed.wav",
+      "sha256": "beed86327ff326d18f5eca283e51b9eecbf9de591f3e2ae82f9059e44a5237c5",
+      "size": 13541770,
+      "kind": "song",
+      "paired_original": "sample1.wav"
+    },
+    {
+      "language": "cn",
+      "repo": "wenet-e2e/opencpop",
+      "revision": "f470bea3c5b0e869279b33745c56f9e35e61c94e",
+      "path": "audio/Sample2_Mixed.wav",
+      "url": "https://raw.githubusercontent.com/wenet-e2e/opencpop/f470bea3c5b0e869279b33745c56f9e35e61c94e/audio/Sample2_Mixed.wav",
+      "sha256": "84736806adcadd160bd933d9c15130e635eda4b3558ebcd7526bfd2317e56651",
+      "size": 4995446,
+      "kind": "song",
+      "paired_original": "sample2.wav"
+    }
+  ]
+}
