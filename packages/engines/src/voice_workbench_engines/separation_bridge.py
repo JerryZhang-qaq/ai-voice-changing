@@ -138,6 +138,10 @@ class SeparatorRunner:
                     actual["segment_size"] = max(64, actual["segment_size"] // 2)
                 else:
                     actual.update(precision="fp32", attention="legacy")
+                # Failed inference frames can retain activation tensors. Drop
+                # that traceback before freeing CUDA memory and retrying.
+                error.__traceback__ = None
+                gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
                 event(state="fallback", reason=fallback, parameters=actual, done=0, total=None)
