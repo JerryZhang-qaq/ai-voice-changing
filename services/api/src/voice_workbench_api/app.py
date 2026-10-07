@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from voice_workbench_storage import ArtifactStore, Conflict, NotFound
+from voice_workbench_storage.store import singer_name
 from voice_workbench_audio.io import probe, AudioError
 from voice_workbench_dataset import SliceConfig
 from voice_workbench_dataset.curation import assign_split
@@ -25,6 +26,11 @@ from voice_workbench_engines.process import EngineError, run_process
 class CleanupRequest(BaseModel):
     artifact_ids: list[str] | None = Field(default=None, max_length=10000)
     job_id: str | None = None
+    force: bool = False
+
+
+class DeleteRequest(BaseModel):
+    artifact_ids: list[str] = Field(min_length=1, max_length=10000)
 
 
 class RetainRequest(BaseModel):
@@ -32,7 +38,8 @@ class RetainRequest(BaseModel):
 
 
 class PrepareRequest(BaseModel):
-    source_ids: list[str] = Field(min_length=1, max_length=20)
+    source_ids: list[str] = Field(default_factory=list, max_length=1000)
+    folder_singer: str | None = None
     min_seconds: float = 2
     target_seconds: float = 8
     max_seconds: float = 15
@@ -71,6 +78,12 @@ class SeparationRequest(BaseModel):
     overlap: int = Field(default=8, ge=2, le=50)
 
 
+class SongSeparationRequest(BaseModel):
+    source_id: str
+    segment_size: int = Field(default=256, ge=64, le=512)
+    overlap: int = Field(default=8, ge=2, le=50)
+
+
 class TrainRequest(BaseModel):
     dataset_id: str
     rate: str = "40k"
@@ -94,6 +107,8 @@ class ConvertRequest(BaseModel):
 class MixRequest(BaseModel):
     vocal_id: str
     instrumental_id: str
+    backing_id: str | None = None
+    backing_db: float = Field(default=0, ge=-40, le=12)
     vocal_db: float = Field(default=0, ge=-40, le=12)
     instrumental_db: float = Field(default=0, ge=-40, le=12)
     format: str = "wav"
@@ -114,12 +129,16 @@ class CoverRequest(BaseModel):
     vocal_db: float = Field(default=0, ge=-40, le=12)
     instrumental_db: float = Field(default=0, ge=-40, le=12)
     format: str = "wav"
+    separate_backing: bool = True
+    include_backing: bool = False
+    backing_db: float = Field(default=0, ge=-40, le=12)
 
 
 def create_app(root=None, web_dir=None):
-    app = FastAPI(title="AI 翻唱工作台", version="0.0.2")
+    app = FastAPI(title="AI 翻唱工作台", version="0.0.3")
     store = ArtifactStore(root or os.environ.get("WORKBENCH_RUNTIME", "runtime"))
     app.state.store = store
+    store.set_runtime("app_version", {"version": "0.0.3"})
 
     @app.exception_handler(NotFound)
     async def not_found(request: Request, error: NotFound):
@@ -139,7 +158,7 @@ def create_app(root=None, web_dir=None):
 
     @app.get("/api/health")
     def health():
-        return {"status": "ok", "version": "0.0.2"}
+        return {"status": "ok", "version": "0.0.3"}
 
     @app.get("/api/resources")
     def resources():
@@ -154,7 +173,20 @@ def create_app(root=None, web_dir=None):
 
     @app.get("/api/artifacts")
     def inventory():
-        return store.inventory()
+        result = store.inventory()
+        existing = {a["id"] for a in result["items"] if a["exists"]}
+        for artifact in result["items"]:
+            if artifact["metadata"].get("kind") == "dataset_manifest" and artifact["exists"]:
+                manifest = read_manifest(artifact["id"])
+                clips = manifest.get("clips", [])
+                artifact["availability"] = {"missing_count": sum(c["artifact_id"] not in existing for c in clips),
+                                            "available_count": sum(c["artifact_id"] in existing for c in clips),
+                                            "accepted_count": sum(c["artifact_id"] in existing and c["status"] == "accepted" for c in clips)}
+        return result
+
+    @app.get("/api/training/folders")
+    def training_folders():
+        return {"items": store.training_folders()}
 
     @app.post("/api/cache/preview")
     def preview(body: CleanupRequest):
@@ -163,6 +195,22 @@ def create_app(root=None, web_dir=None):
     @app.post("/api/cache/cleanup")
     def cleanup(body: CleanupRequest):
         return store.cleanup(**body.model_dump())
+
+    @app.post("/api/storage/delete-preview")
+    def delete_preview(body: DeleteRequest):
+        return store.deletion_preview(body.artifact_ids)
+
+    @app.post("/api/storage/delete")
+    def delete(body: DeleteRequest):
+        return store.delete_artifacts(body.artifact_ids)
+
+    @app.post("/api/storage/cleanup-jobs", status_code=202)
+    def cleanup_job(body: CleanupRequest):
+        return store.create_job("storage_cleanup", metadata=body.model_dump())
+
+    @app.post("/api/storage/delete-jobs", status_code=202)
+    def delete_job(body: DeleteRequest):
+        return store.create_job("storage_delete", metadata=body.model_dump())
 
     @app.patch("/api/artifacts/{artifact_id}/retention")
     def retain(artifact_id: str, body: RetainRequest):
@@ -237,6 +285,17 @@ def create_app(root=None, web_dir=None):
             raise Conflict("分离引擎未就绪：需要 GPU、独立引擎环境及已下载权重")
         return store.create_job("separation", [body.source_id], body.model_dump())
 
+    @app.post("/api/song-separation", status_code=202)
+    def submit_song_separation(body: SongSeparationRequest):
+        source = store.get(body.source_id)
+        if source["metadata"].get("purpose") != "conversion" or source["role"] != "source":
+            raise ValueError("请在转换素材入口导入歌曲或干声")
+        models = {m["id"]: m for m in current_engines()["separation"]["models"]}
+        required = ["lead_melband_aufr33"] + (["vocals_melband_unwa"] if source["metadata"].get("kind") == "song" else [])
+        if not all(models[mid]["ready"] for mid in required):
+            raise Conflict("一键分离需要人声/伴奏和主唱/和声模型就绪")
+        return store.create_job("song_separation", [body.source_id], {**body.model_dump(), "purpose": "conversion", "singer": source["metadata"].get("singer")})
+
     @app.post("/api/jobs/{job_id}/cancel")
     def cancel_job(job_id: str):
         with store.connect(write=True) as db:
@@ -253,9 +312,13 @@ def create_app(root=None, web_dir=None):
         return store.job(job_id)
 
     @app.post("/api/sources", status_code=201)
-    def upload(file: UploadFile = File(...), kind: str = Form("dry_vocal")):
+    def upload(file: UploadFile = File(...), kind: str = Form("dry_vocal"),
+               purpose: str = Form("training"), singer: str = Form("未分类歌手")):
         if kind not in {"dry_vocal", "song"}:
             raise ValueError("素材类型只能是干声或歌曲")
+        if purpose not in {"training", "conversion"}:
+            raise ValueError("素材用途应为训练或音色转换")
+        singer = singer_name(singer)
         filename = Path(file.filename or "audio").name
         with tempfile.TemporaryDirectory(dir=store.root, prefix="upload-") as temp:
             path = Path(temp) / "input"
@@ -267,18 +330,77 @@ def create_app(root=None, web_dir=None):
                         raise HTTPException(413, "单个文件暂限 512 MB")
                     out.write(chunk)
             info = probe(path)
-            return store.import_file(path, name=filename, role="source", metadata={"kind": kind, "audio": info})
+            return store.import_file(path, name=filename, role="source", metadata={"kind": kind, "audio": info, "purpose": purpose, "singer": singer})
+
+    @app.post("/api/training/import-folder", status_code=201)
+    def import_folder(files: list[UploadFile] = File(...), singer: str = Form(...),
+                      kind: str = Form("song"), paths: str = Form("[]")):
+        singer = singer_name(singer)
+        if kind not in {"song", "dry_vocal"} or not 1 <= len(files) <= 1000:
+            raise ValueError("文件夹应包含 1—1000 个音源文件")
+        relative_paths = json.loads(paths)
+        if not isinstance(relative_paths, list) or any(not isinstance(p, str) for p in relative_paths):
+            raise ValueError("文件夹路径应为文件路径列表")
+        parts = [p.replace("\\", "/").split("/") for p in relative_paths]
+        if parts and (len(parts) != len(files) or any(len(p) != 2 or any(v in {"", ".", ".."} for v in p) for p in parts) or len({p[0] for p in parts}) != 1):
+            raise ValueError("请选择只包含音源文件的单层文件夹")
+        valid_extensions = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".aac", ".wma", ".aiff", ".aif", ".opus"}
+        existing = {(a["sha256"], a["metadata"].get("kind")): a for a in store.inventory()["items"]
+                    if a["role"] == "source" and a["exists"] and a["metadata"].get("purpose") == "training" and a["metadata"].get("singer") == singer}
+        created, results, reused, total_bytes = [], [], 0, 0
+        try:
+            with tempfile.TemporaryDirectory(dir=store.root, prefix="folder-upload-") as temp:
+                for index, upload in enumerate(files):
+                    filename = Path((upload.filename or "").replace("\\", "/")).name
+                    if Path(filename).suffix.lower() not in valid_extensions:
+                        raise ValueError(f"文件夹包含非音源文件：{filename}")
+                    path = Path(temp) / str(index)
+                    import hashlib
+                    digest, size = hashlib.sha256(), 0
+                    with path.open("wb") as output:
+                        while chunk := upload.file.read(1024 * 1024):
+                            size += len(chunk)
+                            total_bytes += len(chunk)
+                            if size > 512 * 1024**2 or total_bytes > 20 * 1024**3:
+                                raise HTTPException(413, "每个文件限 512 MB，一次文件夹导入限 20 GB")
+                            output.write(chunk)
+                            digest.update(chunk)
+                    info = probe(path)
+                    previous = existing.get((digest.hexdigest(), kind))
+                    if previous:
+                        results.append(previous)
+                        reused += 1
+                    else:
+                        artifact = store.import_file(path, name=filename, role="source", metadata={"kind": kind, "purpose": "training", "singer": singer, "audio": info, "folder_name": singer})
+                        created.append(artifact["id"])
+                        results.append(artifact)
+                        existing[(artifact["sha256"], kind)] = artifact
+            return {"singer": singer, "items": results, "imported_count": len(created), "reused_count": reused}
+        except BaseException:
+            if created:
+                store.delete_artifacts(created)
+            raise
 
     @app.post("/api/datasets/prepare", status_code=202)
     def prepare(body: PrepareRequest):
+        if body.folder_singer:
+            body.check_harmony = True
+            folder = next((f for f in store.training_folders() if f["singer"] == body.folder_singer), None)
+            if not folder:
+                raise NotFound("训练素材文件夹不存在")
+            body.source_ids = folder["source_ids"]
+        if not body.source_ids:
+            raise ValueError("请选择训练素材文件夹")
         preprocessing_fields = {"force_vocal_separation", "separate_backing", "dereverb", "denoise", "check_harmony"}
         policy = PreparationPolicy(body.mode, body.solo_confirmed)
         policy.validate()
-        config = SliceConfig(**body.model_dump(exclude={"source_ids", "mode", "solo_confirmed", *preprocessing_fields}))
+        config = SliceConfig(**body.model_dump(exclude={"source_ids", "folder_singer", "mode", "solo_confirmed", *preprocessing_fields}))
         config.validate()
         required = set()
         for aid in body.source_ids:
             source = store.get(aid)
+            if source["metadata"].get("purpose") == "conversion":
+                raise ValueError("转换素材不能混入训练文件夹")
             if source["metadata"].get("kind") not in {"song", "dry_vocal"} and source["metadata"].get("stem") not in {"vocals", "lead", "dry", "clean"}:
                 raise ValueError("请选择歌曲或人声音频")
             if source["metadata"].get("kind") == "song" or body.force_vocal_separation:
@@ -293,7 +415,10 @@ def create_app(root=None, web_dir=None):
             models = {m["id"]: m for m in current_engines()["separation"]["models"]}
             if not all(models[m]["ready"] for m in required):
                 raise Conflict("自动清洗需要 GPU 分离引擎和相应权重；当前只可处理不带伴奏的干声")
-        return store.create_job("dataset_prepare", body.source_ids, {"source_ids": body.source_ids, "config": config.dict(),
+        singers = {store.get(aid)["metadata"].get("singer", "未分类歌手") for aid in body.source_ids}
+        if len(singers) != 1:
+            raise ValueError("一次只能处理一个歌手的训练文件夹")
+        return store.create_job("dataset_prepare", body.source_ids, {"source_ids": body.source_ids, "singer": next(iter(singers)), "purpose": "training", "config": config.dict(),
                                 "policy": policy.dict(), "preprocessing": body.model_dump(include=preprocessing_fields)})
 
     def read_manifest(artifact_id):
@@ -362,7 +487,9 @@ def create_app(root=None, web_dir=None):
     @app.post("/api/conversion", status_code=202)
     def submit_conversion(body: ConvertRequest):
         validate_model(body.model_id, body.index_id)
-        store.get(body.audio_id)
+        source = store.get(body.audio_id)
+        if source["metadata"].get("purpose") == "training":
+            raise ValueError("请使用独立的转换素材入口")
         if not current_engines()["rvc"]["ready"]:
             raise Conflict("RVC 转换引擎未就绪")
         return store.create_job("rvc_convert", [body.audio_id, body.model_id, *([body.index_id] if body.index_id else [])], body.model_dump())
@@ -371,17 +498,21 @@ def create_app(root=None, web_dir=None):
     def submit_mix(body: MixRequest):
         if body.format not in {"wav", "flac", "mp3"}:
             raise ValueError("不支持的导出格式")
-        return store.create_job("mix", [body.vocal_id, body.instrumental_id], body.model_dump())
+        return store.create_job("mix", [body.vocal_id, body.instrumental_id, *([body.backing_id] if body.backing_id else [])], body.model_dump())
 
     @app.post("/api/covers", status_code=202)
     def submit_cover(body: CoverRequest):
         validate_model(body.model_id, body.index_id)
-        store.get(body.source_id)
+        source = store.get(body.source_id)
+        if source["metadata"].get("purpose") == "training":
+            raise ValueError("请使用独立的转换素材入口")
         if body.format not in {"wav", "flac", "mp3"}:
             raise ValueError("不支持的导出格式")
         observed = current_engines()
         if not observed["rvc"]["ready"] or not any(m["id"] == body.separation_model and m["task"] == "vocals" and m["ready"] for m in observed["separation"]["models"]):
             raise Conflict("制作翻唱需要 RVC 和人声/伴奏分离引擎均已就绪")
+        if (body.separate_backing or body.include_backing) and not any(m["id"] == "lead_melband_aufr33" and m["ready"] for m in observed["separation"]["models"]):
+            raise Conflict("和声分离模型尚未就绪")
         return store.create_job("cover", [body.source_id, body.model_id, *([body.index_id] if body.index_id else [])], body.model_dump())
 
     @app.get("/api/datasets/{artifact_id}")
@@ -412,6 +543,14 @@ def create_app(root=None, web_dir=None):
         if not ids:
             raise ValueError("请先审查并接受片段")
         return store.create_job("dataset_export", [artifact_id, *ids], {"dataset_id": artifact_id})
+
+    @app.post("/api/datasets/{artifact_id}/export-prepared", status_code=202)
+    def export_prepared(artifact_id: str):
+        manifest = read_manifest(artifact_id)
+        ids = [c["artifact_id"] for c in manifest["clips"] if c["status"] != "excluded" and c.get("duration", 1) >= 1]
+        if not ids:
+            raise ValueError("没有可导出的待审查干声切片")
+        return store.create_job("dataset_export", [artifact_id, *ids], {"dataset_id": artifact_id, "prepared": True})
 
     @app.post("/api/datasets/{artifact_id}/edit", status_code=202)
     def edit(artifact_id: str, body: EditRequest):
@@ -446,6 +585,11 @@ def create_app(root=None, web_dir=None):
             raise ValueError("无效的片段或审查决定")
         for clip in manifest["clips"]:
             if clip["artifact_id"] in body.decisions:
+                if body.decisions[clip["artifact_id"]] == "accepted":
+                    import soundfile as sf
+                    info = sf.info(store.path(clip["artifact_id"]))
+                    if info.frames < info.samplerate:
+                        raise ValueError("不足 1 秒的切片不能接受或用于训练")
                 clip["status"] = body.decisions[clip["artifact_id"]]
                 clip["decision"] = {"origin": "manual", "note": body.note}
         accepted = [c["artifact_id"] for c in manifest["clips"] if c["status"] == "accepted"]
@@ -456,7 +600,7 @@ def create_app(root=None, web_dir=None):
         assign_split(manifest)
         from io import BytesIO
         return store.import_stream(BytesIO(json.dumps(manifest, ensure_ascii=False, indent=2).encode()),
-                                   name="数据集审查清单.json", role="dataset", metadata={"kind": "dataset_manifest", "summary": manifest["summary"], "parent_id": artifact_id})
+                                   name=f"{manifest.get('singer', store.get(artifact_id)['metadata'].get('singer', '未分类歌手'))}-ready.json", role="dataset", metadata={"kind": "dataset_manifest", "summary": manifest["summary"], "parent_id": artifact_id, "singer": manifest.get("singer", store.get(artifact_id)["metadata"].get("singer", "未分类歌手")), "purpose": "training"})
 
     dist = Path(web_dir or "apps/web/dist")
     if dist.is_dir():

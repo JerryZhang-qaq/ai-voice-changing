@@ -1,73 +1,28 @@
 import { useEffect, useState } from 'react';
 import { api, bytes, json } from './api';
+import { JobProgress, useTask } from './JobProgress';
 
-interface Artifact {
-  id: string; name: string; role: string; job_id: string | null; size: number;
-  cleanable: boolean; protection: string[]; retained: boolean; exists: boolean;
-}
-interface Inventory { items: Artifact[]; total_bytes: number; cleanable_bytes: number; disk_free_bytes: number; }
-interface Preview { reclaimable_bytes: number; cleanable_count: number; }
-interface Result { deleted_ids: string[]; reclaimed_bytes: number; errors: { id: string; error: string }[]; }
-const roles: Record<string, string> = { source: '原始音频', cache: '中间缓存', dataset: '训练数据', model: '模型', export: '成品' };
-const protections: Record<string, string> = { permanent: '长期保留', retained: '手动保留', active_job: '任务使用中', unsafe_path: '文件路径异常' };
+interface Artifact {id:string;name:string;role:string;location:string;job_id:string|null;size:number;exists:boolean;retained:boolean;manual_cleanable:boolean;deletable:boolean;cleanable:boolean;protection:string[];metadata:{singer?:string};}
+interface Inventory {items:Artifact[];total_bytes:number;cleanable_bytes:number;disk_free_bytes:number;}
+interface Preview {cleanable_count:number;reclaimable_bytes:number;items:Artifact[];affected_datasets:{id:string;name:string;clip_count:number;source_count:number}[];}
+const roles:Record<string,string>={source:'原始素材',cache:'中间缓存',dataset:'数据集与切片',model:'模型与索引',export:'导出与成品'};
 
-export function CachePanel() {
-  const [data, setData] = useState<Inventory | null>(null);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [job, setJob] = useState('');
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [scope, setScope] = useState<object>({});
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
-  async function refresh() {
-    const inventory = await api<Inventory>('/artifacts');
-    setData(inventory);
-    setSelected(previous => previous.filter(id => inventory.items.some(a => a.id === id && a.cleanable)));
-  }
-  useEffect(() => { refresh().catch(e => setError(e.message)); }, []);
-  async function action(fn: () => Promise<void>) {
-    setBusy(true); setError('');
-    try { await fn(); } catch (e) { setError((e as Error).message); }
-    finally { setBusy(false); }
-  }
-  function inspect(body: object) {
-    void action(async () => { setScope(body); setPreview(await api<Preview>('/cache/preview', json(body))); });
-  }
-  return <section>
-    <div className="section-head"><div><h2>缓存与存储</h2><p>清理中间产物，保留原始素材、训练数据、模型和成品。</p></div><button disabled={busy} onClick={() => void action(refresh)}>刷新</button></div>
-    {error && <p className="error" role="alert">{error}</p>}
-    {message && <p className="notice" role="status">{message}</p>}
-    <div className="stats">
-      <article><span>已登记文件</span><strong>{bytes(data?.total_bytes ?? 0)}</strong></article>
-      <article><span>可清理缓存</span><strong>{bytes(data?.cleanable_bytes ?? 0)}</strong></article>
-      <article><span>磁盘剩余空间</span><strong>{bytes(data?.disk_free_bytes ?? 0)}</strong></article>
-    </div>
-    <div className="toolbar">
-      <button disabled={busy || !data?.items.some(i=>i.cleanable)} onClick={() => inspect({})}>清理全部缓存</button>
-      <button disabled={busy || !selected.length} onClick={() => inspect({ artifact_ids: selected })}>清理所选 ({selected.length})</button>
-      <label>任务 <select value={job} onChange={e => setJob(e.target.value)}><option value="">选择任务</option>{[...new Set(data?.items.flatMap(i => i.job_id ? [i.job_id] : []))].map(id => <option key={id} value={id}>{id.slice(0, 12)}</option>)}</select></label>
-      <button disabled={busy || !job} onClick={() => inspect({ job_id: job })}>清理任务缓存</button>
-    </div>
-    <div className="table-wrap"><table><thead><tr><th>选择</th><th>文件</th><th>类型</th><th>大小</th><th>状态</th><th>保留</th></tr></thead><tbody>
-      {data?.items.map(a => <tr key={a.id}>
-        <td><input type="checkbox" aria-label={`选择 ${a.name}`} disabled={!a.cleanable || busy} checked={selected.includes(a.id)} onChange={e => setSelected(e.target.checked ? [...selected, a.id] : selected.filter(id => id !== a.id))} /></td>
-        <td>{a.name}<small>{a.id.slice(0, 12)}</small></td><td>{roles[a.role] ?? a.role}</td><td>{bytes(a.size)}</td>
-        <td>{!a.exists ? '文件缺失或异常' : a.cleanable ? '可清理' : a.protection.map(p => protections[p] ?? p).join(' · ')}</td>
-        <td>{a.role === 'cache' && <input type="checkbox" aria-label={`保留 ${a.name}`} checked={a.retained} disabled={busy} onChange={e => void action(async () => { await api(`/artifacts/${a.id}/retention`, json({ retained: e.target.checked }, 'PATCH')); await refresh(); })} />}</td>
-      </tr>)}
-    </tbody></table></div>
-    {data && !data.items.length && <div className="empty">还没有音频或中间产物。处理任务完成后，可在这里管理缓存。</div>}
-    {preview && <div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="cleanup-title">
-      <h3 id="cleanup-title">确认清理缓存</h3><p>预计清理 {preview.cleanable_count} 项缓存，释放 {bytes(preview.reclaimable_bytes)}。</p>
-      <p>清理后，相应中间步骤需要重新计算。训练工作目录中的检查点也会删除；正在使用的文件会自动跳过。</p>
-      <div className="toolbar"><button disabled={busy} onClick={() => setPreview(null)}>取消</button><button className="danger" disabled={busy || !preview.cleanable_count} onClick={() => void action(async () => {
-        const result = await api<Result>('/cache/cleanup', json(scope));
-        setPreview(null);
-        setMessage(`已清理 ${result.deleted_ids.length} 项缓存，移除 ${bytes(result.reclaimed_bytes)}。${result.errors.length ? ` ${result.errors.length} 项清理失败，请重试。` : ''}`);
-        if (result.errors.length) setError(result.errors.map(e => e.error).join('；'));
-        await refresh();
-      })}>{busy ? '处理中…' : '确认清理'}</button></div>
-    </div></div>}
+export function CachePanel(){
+  const [data,setData]=useState<Inventory|null>(null),[selected,setSelected]=useState<string[]>([]),[role,setRole]=useState(''),[singer,setSinger]=useState('');
+  const [preview,setPreview]=useState<Preview|null>(null),[scope,setScope]=useState<object>({}),[deleting,setDeleting]=useState(false);
+  const [busy,setBusy]=useState(false),[error,setError]=useState('');
+  const cleanTask=useTask('storage:cleanup'),deleteTask=useTask('storage:delete');
+  async function refresh(){const next=await api<Inventory>('/artifacts');setData(next);setSelected(old=>old.filter(id=>next.items.some(i=>i.id===id)));}
+  useEffect(()=>{void refresh().catch(e=>setError(e.message));},[]);
+  async function action(fn:()=>Promise<void>){setBusy(true);setError('');try{await fn();}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+  function inspect(body:object,isDelete=false){void action(async()=>{setScope(body);setDeleting(isDelete);setPreview(await api<Preview>(isDelete?'/storage/delete-preview':'/cache/preview',json(body)));});}
+  const visible=data?.items.filter(i=>(!role||i.role===role)&&(!singer||i.metadata.singer===singer))??[];
+  return <section><div className="section-head"><div><h2>缓存与存储</h2><p>手动清理所有闲置缓存，包括手动保留的缓存；原始素材、旧数据集、模型和成品可另行选中永久删除。</p></div><button disabled={busy} onClick={()=>void action(refresh)}>刷新</button></div>{error&&<p className="error" role="alert">{error}</p>}
+    <div className="stats"><article><span>已登记文件</span><strong>{bytes(data?.total_bytes??0)}</strong></article><article><span>全部闲置缓存</span><strong>{bytes(data?.items.filter(i=>i.manual_cleanable&&i.exists).reduce((n,i)=>n+i.size,0)??0)}</strong></article><article><span>磁盘剩余</span><strong>{bytes(data?.disk_free_bytes??0)}</strong></article></div>
+    <article className="card"><h3>手动清理缓存</h3><p>可清除分离音轨、工作母版、未保留切片、日志、下载临时文件和训练检查点。任务正在使用的文件会跳过。</p><div className="toolbar"><button disabled={busy||cleanTask.running||!data?.items.some(i=>i.manual_cleanable)} onClick={()=>inspect({force:true})}>清理全部缓存（含手动保留）</button><button disabled={busy||cleanTask.running||!selected.length} onClick={()=>inspect({artifact_ids:selected,force:true})}>清理所选缓存</button></div><JobProgress id={cleanTask.id} onComplete={()=>void action(refresh)}/></article>
+    <article className="card"><h3>全部文件与长期保留资料</h3><div className="toolbar"><label>文件类型 <select aria-label="存储文件类型" value={role} onChange={e=>setRole(e.target.value)}><option value="">全部类型</option>{Object.entries(roles).map(([key,name])=><option key={key} value={key}>{name}</option>)}</select></label><label>歌手 <select aria-label="存储歌手" value={singer} onChange={e=>setSinger(e.target.value)}><option value="">全部歌手</option>{[...new Set(data?.items.flatMap(i=>i.metadata.singer?[i.metadata.singer]:[])??[])].map(name=><option key={name}>{name}</option>)}</select></label><button disabled={busy} onClick={()=>setSelected(visible.filter(i=>i.deletable).map(i=>i.id))}>选择当前列表</button><button onClick={()=>setSelected([])}>清空选择</button><button className="danger" disabled={busy||deleteTask.running||!selected.length} onClick={()=>inspect({artifact_ids:selected},true)}>永久删除所选文件 ({selected.length})</button></div>
+      <div className="table-wrap"><table><thead><tr><th>选择</th><th>文件与目录</th><th>类型</th><th>大小</th><th>状态</th><th>自动清理保留</th></tr></thead><tbody>{visible.map(i=><tr key={i.id}><td><input type="checkbox" aria-label={`选择 ${i.name}`} disabled={busy||!i.deletable} checked={selected.includes(i.id)} onChange={e=>setSelected(e.target.checked?[...selected,i.id]:selected.filter(id=>id!==i.id))}/></td><td>{i.name}<small>{i.location}</small></td><td>{roles[i.role]}</td><td>{bytes(i.size)}</td><td>{i.protection.includes('active_job')?'任务使用中':!i.exists?'文件已缺失':i.role==='cache'?'可手动清理':'可选中永久删除'}</td><td>{i.role==='cache'&&<input aria-label={`保留 ${i.name}`} type="checkbox" checked={i.retained} disabled={busy} onChange={e=>void action(async()=>{await api(`/artifacts/${i.id}/retention`,json({retained:e.target.checked},'PATCH'));await refresh();})}/>}</td></tr>)}</tbody></table></div>{!visible.length&&<div className="empty">此列表没有文件。</div>}<JobProgress id={deleteTask.id} onComplete={()=>void action(refresh)}/>
+    </article>
+    {preview&&<div className="dialog-backdrop"><div className="dialog" role="dialog" aria-modal="true" aria-labelledby="cleanup-title"><h3 id="cleanup-title">{deleting?'确认永久删除':'确认手动清理缓存'}</h3><p>删除 {preview.cleanable_count} 项，预计释放 {bytes(preview.reclaimable_bytes)}。{deleting?'选中的长期资料也会删除。':'包括本次范围内手动保留的缓存。'}</p><details><summary>查看本次文件范围</summary>{preview.items.map(i=><small className="file-list" key={i.id}>{i.metadata.singer?`${i.metadata.singer} / `:''}{i.name} · {bytes(i.size)}{!(deleting?i.deletable:i.cleanable)?' · 跳过（受到保护或不在缓存范围）':''}</small>)}</details>{!!preview.affected_datasets.length&&<div className="notice"><strong>受影响的数据集版本</strong>{preview.affected_datasets.map(d=><small className="file-list" key={d.id}>{d.name} · {d.id.slice(0,8)} · {d.clip_count} 个切片、{d.source_count} 个来源</small>)}<p>对应切片或来源删除后，旧版本会显示缺失状态，需要重新准备。</p></div>}<p>删除文件无法撤销。活动任务使用中的文件会跳过。</p><div className="toolbar"><button autoFocus onClick={()=>setPreview(null)}>取消</button><button className="danger" disabled={busy||!preview.cleanable_count} onClick={()=>void action(async()=>{const job=await api<{id:string}>(deleting?'/storage/delete-jobs':'/storage/cleanup-jobs',json(scope));(deleting?deleteTask:cleanTask).track(job);setPreview(null);})}>确认{deleting?'永久删除':'清理'}</button></div></div></div>}
   </section>;
 }

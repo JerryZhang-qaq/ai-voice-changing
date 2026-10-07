@@ -89,7 +89,7 @@ def training_chunks(store, accepted, workspace, rate):
     derived = []
     for clip in accepted:
         audio, sr = sf.read(store.path(clip["artifact_id"]), dtype="float32")
-        if audio.ndim != 1 or len(audio) / sr < 1.1:
+        if audio.ndim != 1 or len(audio) < sr:
             raise EngineError("已接受片段过短或不是单声道，请先复核数据集")
         count = max(1, math.ceil(len(audio) / (5.4 * sr)))
         edges = [round(i * len(audio) / count) for i in range(count + 1)]
@@ -127,6 +127,9 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
     assign_split(manifest)
     train_ids = set(manifest["split"]["train"])
     accepted = [c for c in manifest["clips"] if c["artifact_id"] in train_ids]
+    from voice_workbench_storage.store import readable_stem
+    singer = manifest.get("singer", store.get(dataset_id)["metadata"].get("singer", "未分类歌手"))
+    model_label = f"{readable_stem(singer)}-v2-{rate}-e{epochs}-bs{batch_size}"
     if len(accepted) < 2:
         raise EngineError("至少需要两个已接受片段；实际音质还需要足够有效时长和覆盖")
     clips = sorted({c["artifact_id"] for c in accepted})
@@ -134,7 +137,7 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
         raise EngineError("数据集包含重复片段引用")
     if len({c["duplicate_group"] for c in accepted}) != len(accepted):
         raise EngineError("数据集包含完全重复音频，请先排除")
-    workspace_record = store.allocate_workspace(job_id, name="RVC 特征与训练检查点", metadata={"dataset_id": dataset_id, "rate": rate, "version": "v2", "epochs": epochs})
+    workspace_record = store.allocate_workspace(job_id, name=f"{model_label}-checkpoints", metadata={"dataset_id": dataset_id, "singer": singer, "purpose": "training", "rate": rate, "version": "v2", "epochs": epochs})
     workspace = store.path(workspace_record["id"])
     (workspace / "dataset_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     store.update_job(job_id, "running", metadata={"workspace_id": workspace_record["id"]})
@@ -147,11 +150,20 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
     env = os.environ.copy()
     env["PYTHONPATH"] = str(root)
     env["OMP_NUM_THREADS"] = "4"
+    env["PYTHONPATH"] += os.pathsep + str(Path(__file__).with_name("instrumentation"))
+    env["WORKBENCH_TRAIN_TELEMETRY"] = "1"
     def execute(script, args, stage, timeout=7200):
+        from .telemetry import LogTelemetry
+        observation = LogTelemetry(store, job_id, log, stage)
+        def tick():
+            if progress:
+                progress(stage)
+            observation.tick()
         if progress:
             progress(stage)
         run_process(rvc_command(python, root, script, args), cwd=root, log=log, timeout=timeout, env=env,
-                    progress=(lambda: progress(stage)) if progress else None)
+                    progress=tick)
+        observation.tick()
     try:
         if resume_id:
             previous = store.get(resume_id)
@@ -183,10 +195,13 @@ def train(store: ArtifactStore, job_id: str, dataset_id: str, *, rate="40k", epo
         indices = list(workspace.glob("added_*.index"))
         if len(indices) != 1:
             raise EngineError("索引未生成或不唯一，检查点已保留")
-        model = store.import_file(final, name=f"音色_{job_id[:8]}.pth", role="model", job_id=job_id,
-                                  metadata={"kind": "rvc_model", "version": "v2", "sample_rate": numeric_rate, "f0": True, "dataset_id": dataset_id,
+        steps = store.job(job_id)["metadata"].get("training", {}).get("step")
+        if steps is not None:
+            model_label += f"-s{steps}"
+        model = store.import_file(final, name=f"{model_label}.pth", role="model", job_id=job_id,
+                                  metadata={"kind": "rvc_model", "singer": singer, "version": "v2", "sample_rate": numeric_rate, "f0": True, "dataset_id": dataset_id, "batch_size": batch_size, "steps": steps,
                                             "rvc_revision": RVC_REVISION, "speaker_id": 0, "epochs": epochs})
-        index = store.import_file(indices[0], name=f"音色_{job_id[:8]}.index", role="model", job_id=job_id,
+        index = store.import_file(indices[0], name=f"{model_label}.index", role="model", job_id=job_id,
                                   metadata={"kind": "rvc_index", "model_id": model["id"], "dimension": 768})
         final.unlink()
         # Epoch inference exports are redundant once the final model is catalogued.
@@ -212,7 +227,8 @@ def convert(store: ArtifactStore, job_id, audio_id, model_id, *, index_id=None, 
     if index_id and store.get(index_id)["metadata"].get("kind") != "rvc_index":
         raise EngineError("索引类型不正确")
     parameters = {"pitch": pitch, "index_rate": index_rate if index_id else 0, "protect": protect, "rms_mix": rms_mix, "speaker_id": speaker_id}
-    cache_key = hashlib.sha256(json.dumps({"source": store.get(audio_id)["sha256"], "model": model["sha256"],
+    source = store.get(audio_id)
+    cache_key = hashlib.sha256(json.dumps({"source": source["sha256"], "scope": {k: source["metadata"].get(k) for k in ("singer", "purpose")}, "model": model["sha256"],
                                           "index": store.get(index_id)["sha256"] if index_id else None, "parameters": parameters, "rvc_revision": RVC_REVISION}, sort_keys=True).encode()).hexdigest()
     cached = store.cached(cache_key, job_id)
     if cached:
@@ -234,5 +250,9 @@ def convert(store: ArtifactStore, job_id, audio_id, model_id, *, index_id=None, 
     from voice_workbench_audio.io import probe
     if abs(sf.info(output).duration - probe(store.path(audio_id))["duration"]) > .1:
         raise EngineError("转换音频时长异常，禁止直接混音")
-    return store.import_file(output, name="转换人声.wav", job_id=job_id, metadata={"kind": "converted_audio", "source_id": audio_id,
+    from voice_workbench_storage.store import readable_stem
+    original = store.get(audio_id)
+    target_name = model["metadata"].get("singer", Path(model["name"]).stem)
+    output_name = f"{readable_stem(Path(original['name']).stem)}-to-{readable_stem(target_name)}-pitch{pitch:+d}-index{parameters['index_rate']:g}.wav"
+    return store.import_file(output, name=output_name, job_id=job_id, metadata={"kind": "converted_audio", "source_id": audio_id,
                              "model_id": model_id, "index_id": index_id, "parameters": parameters, "rvc_revision": RVC_REVISION, "cache_key": cache_key})["id"]

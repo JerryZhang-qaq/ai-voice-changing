@@ -55,8 +55,13 @@ API 不直接执行重型推理。任务写入 SQLite，由 worker 按持久化�
 ```text
 runtime/
   catalog.sqlite3              产物角色、任务、引用保护与 worker 心跳
-  artifacts/<uuid>.<suffix>    原件、音频、清单、模型与导出文件，按角色管理
-  artifacts/<uuid>.dir/        可清理的训练工作目录及检查点
+  artifacts/歌手/<实际歌手>/
+    原始素材/                  训练音源：原曲名__内部ID.ext
+    转换素材/                  转换音源：原曲名__内部ID.ext
+    切片数据集/<歌手>-after__版本ID/   音频切片与准备清单
+    切片数据集/<歌手>-ready__版本ID/   审查清单，引用已保护切片
+    处理中间文件/              工作母版、分离音轨与训练检查点
+  artifacts/<可读名字>__<ID>.<suffix>  模型、索引、ZIP 与成品
   processing-<job_uuid>-*/     临时代理和分析文件，任务结束自动删除
   engines/rvc/                 固定版本的外部引擎（可配置位置）
   venvs/                      外部引擎独立依赖（可配置位置）
@@ -69,8 +74,14 @@ runtime/
 
 ## UI
 
-当前有数据集、分离、RVC、混音、基础资源、任务、缓存七个入口。数据集页支持清洗 A/B、和声弃用证据、波形与边界编辑、人工纠正和新版本。自动模式依据独唱声明与实验规则准入，全部人工复核模式仍可使用。身份识别不在范围内；独立音质验收仍待完成。
+当前有训练数据集、分离、RVC 训练、转换翻唱、混音、基础资源、任务、缓存八个入口。训练和转换素材使用用途字段隔离，分别由歌手目录管理。数据集页支持清洗 A/B、和声弃用证据、波形与边界编辑、人工纠正和新版本。自动模式依据独唱声明与实验规则准入，全部人工复核模式仍可使用。身份识别不在范围内；独立音质验收仍待完成。
 
 ## 外部资源
 
 候选来源：RVC-Project/Retrieval-based-Voice-Conversion-WebUI、IAHispano/Applio、nomadkaraoke/python-audio-separator、ZFTurbo/Music-Source-Separation-Training。接入前固定 commit、验证调用协议、记录依赖和许可证，并逐一确认权重分发条件。初期不复制整个上游 UI，不宣称已支持任意 RVC 文件。
+
+## 0.0.3 进度与升级
+
+`JobProgress` 在执行位置和任务中心读取同一 SQLite 状态，页面切换与刷新后恢复。上传读取 XHR 字节进度；下载读取真实文件字节；切片、导出与删除读取实际数量。RoFormer tqdm 与特征提取计数经增量 UTF-8 日志解析；固定 RVC 模块训练循环在每个 batch 后通过导入钩子发送观测 JSON，rank 0 每秒和轮次结束最多采样一次，保留全部原训练运算。显存与利用率来自 nvidia-smi，估时来自实际已完成工作量变化；无法观测时保持未知。
+
+`upgrade.py` 校验 Release 文件清单，在原目录取得 WorkerLock 后原子替换代码文件，保护 runtime 和环境。旧数据清理使用持久化 cutoff、待完成标记和最终收据，崩溃后可继续，再次升级不会删除新数据。用户主动删除可突破普通保留标记，但活动任务持有的输入仍不可删除。

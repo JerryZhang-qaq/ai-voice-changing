@@ -19,7 +19,7 @@ from .admission import PreparationPolicy, decide_clip, plateau_ratio, ADMISSION_
 from .curation import assign_split
 
 
-PROCESSOR_VERSION = "solo-pipeline-3"
+PROCESSOR_VERSION = "solo-pipeline-4"
 
 
 def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], config: SliceConfig, progress=None, *, processing_records=None, policy=None):
@@ -38,7 +38,8 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
             return cached["id"]
         except NotFound:
             pass  # A cleaned clip means this data preparation must be rebuilt.
-    dataset = {"schema_version": 3, "processor_version": PROCESSOR_VERSION, "config": config.dict(), "policy": policy.dict(),
+    singer = store.get(source_ids[0])["metadata"].get("singer", "未分类歌手")
+    dataset = {"schema_version": 4, "singer": singer, "processor_version": PROCESSOR_VERSION, "config": config.dict(), "policy": policy.dict(),
                "quality_rules": {"preservation_version": GUARD_VERSION, "duplicate_version": DUPLICATE_VERSION, "admission_version": ADMISSION_VERSION, "analysis_version": ANALYSIS_VERSION, "calibrated": False},
                "quality_mode": policy.mode, "sources": [], "clips": [], "validation": {"status": "not_split"}}
     seen = {}
@@ -72,7 +73,7 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
                        "dereverb": "dereverb" in used_tasks, "separation": "vocals" in used_tasks,
                        "backing_separation": "lead_backing" in used_tasks, "after_diagnosis": cleaned_diagnosis}
             sf.write(master_path, clean, sr, subtype="FLOAT")
-            master = store.import_file(master_path, name="工作母版.wav", job_id=job_id,
+            master = store.import_file(master_path, name=f"{Path(source['name']).stem}-master.wav", job_id=job_id,
                                        metadata={"source_id": source_id, "processor_version": PROCESSOR_VERSION, "cleanup": cleanup, "channel": channel})
             voice, _ = analyze_file(master_path, work, (lambda: progress("分析音高与发音边界", index, len(source_ids))) if progress else None)
             slices, analysis = segment(clean, sr, config, voice=voice)
@@ -99,7 +100,7 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
                     reasons.append("NEAR_DUPLICATE")
                 status, reasons, decision = decide_clip(policy, metrics, reasons, singing, harmony)
                 seen.setdefault(fingerprint, artifact["id"])
-                dataset["clips"].append({"artifact_id": artifact["id"], "source_id": source_id, "source_group": source["metadata"].get("source_group", source["sha256"]),
+                dataset["clips"].append({"artifact_id": artifact["id"], "name": artifact["name"], "source_name": source["name"], "source_id": source_id, "source_group": source["metadata"].get("source_group", source["sha256"]),
                                          "sample_rate": sr, **interval, "metrics": metrics, "status": status, "reasons": reasons,
                                          "duplicate_group": fingerprint, "near_duplicate_check": duplicate_check,
                                          "near_duplicate_of": [m["artifact_id"] for m in duplicate_check["matches"]], "singing": singing, "decision": decision})
@@ -116,6 +117,6 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
         manifest_path = work / "manifest.json"
         manifest_path.write_text(json.dumps(dataset, ensure_ascii=False, indent=2), encoding="utf-8")
         # Manifest is permanent; provisional clips remain cleanable unless explicitly retained.
-        manifest = store.import_file(manifest_path, name="数据集审查清单.json", role="dataset", job_id=job_id,
-                                     metadata={"kind": "dataset_manifest", "summary": dataset["summary"], "processor_version": PROCESSOR_VERSION, "cache_key": cache_key})
+        manifest = store.import_file(manifest_path, name=f"{singer}-after.json", role="dataset", job_id=job_id,
+                                     metadata={"kind": "dataset_manifest", "singer": singer, "purpose": "training", "summary": dataset["summary"], "processor_version": PROCESSOR_VERSION, "cache_key": cache_key})
     return manifest["id"]

@@ -6,11 +6,11 @@ cd /d "%~dp0"
 echo Starting VoiceWorkbench Windows installer...
 echo.
 if not exist "%~dp0scripts\install-windows.ps1" goto missing
-"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-windows.ps1"
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\install-windows.ps1" %*
 set "workbench_exit=%errorlevel%"
 echo.
 if "%workbench_exit%"=="0" (
-  echo Installation completed. Run Start-Windows.cmd to start the workbench.
+  echo Installation completed. Run Start-Windows.cmd in the installation folder printed above.
 ) else (
   echo [ERROR] Installation failed. Exit code: %workbench_exit%
   echo See the messages above and runtime\diagnostics\install-*.log.

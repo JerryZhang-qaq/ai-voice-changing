@@ -81,6 +81,21 @@ def test_partial_extraction_is_reported(tmp_path):
     assert "Press any key" in result.stdout
 
 
+@pytest.mark.parametrize('name', ['Update-Windows.cmd', 'Upgrade-Windows.cmd'])
+def test_upgrade_wrappers_forward_mode_and_keep_failure_window(tmp_path, name):
+    directory = prepare(tmp_path, name)
+    (directory / 'Install-Windows.cmd').write_bytes((ROOT / 'Install-Windows.cmd').read_bytes())
+    scripts = directory / 'scripts'
+    scripts.mkdir()
+    (scripts / 'install-windows.ps1').write_text(
+        "param([switch]$Upgrade)\nif (-not $Upgrade) { exit 12 }; Write-Host 'UPGRADE_MODE_REACHED'; exit 37\n",
+        encoding='utf-8-sig',
+    )
+    result = invoke(directory, name)
+    assert result.returncode == 37 and 'UPGRADE_MODE_REACHED' in result.stdout
+    assert 'Press any key to close this window.' in result.stdout
+
+
 @pytest.mark.parametrize("name", [
     "Start-Windows.cmd", "Diagnose-Windows.cmd", "GPU-Test-Windows.cmd",
     "Prepare-Test-Datasets-Windows.cmd",

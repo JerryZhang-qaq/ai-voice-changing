@@ -1,0 +1,22 @@
+{
+  "status": "passed",
+  "version": "0.0.3",
+  "pages": 8,
+  "fixture_gpu_cores": true,
+  "checks": [
+    "folder import",
+    "singer inference",
+    "batch prepare inline progress",
+    "Y/N review",
+    "readable after/ready ZIP",
+    "waveform",
+    "fixed sidebar",
+    "training/conversion isolation",
+    "stem downloads",
+    "download modal",
+    "manual cache cleanup",
+    "accepted clip protection"
+  ],
+  "console_errors": [],
+  "server_errors": []
+}

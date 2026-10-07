@@ -46,7 +46,7 @@ def separate(store: ArtifactStore, job_id, source_id, model_id, *, segment_size=
     source = store.get(source_id)
     from voice_workbench_audio.io import probe
     source_duration = probe(store.path(source_id))["duration"]
-    base_key = {"source": source["sha256"], "weight": weight_hash, "config": config_hash, "engine_version": ready["environment"].get("package_version"),
+    base_key = {"source": source["sha256"], "singer": source["metadata"].get("singer"), "purpose": source["metadata"].get("purpose"), "weight": weight_hash, "config": config_hash, "engine_version": ready["environment"].get("package_version"),
                 "segment_size": segment_size, "overlap": overlap, "task": spec["task"]}
     keys = {stem: hashlib.sha256(json.dumps({**base_key, "stem": stem}, sort_keys=True).encode()).hexdigest() for stem in spec["stems"].values()}
     ids = {}
@@ -63,8 +63,15 @@ def separate(store: ArtifactStore, job_id, source_id, model_id, *, segment_size=
                    "output_dir": str(work), "response": str(work / "response.json"), "segment_size": segment_size, "overlap": overlap, "stems": spec["stems"]}
         request_path = work / "request.json"
         request_path.write_text(json.dumps(request), encoding="utf-8")
+        from .telemetry import LogTelemetry
+        observation = LogTelemetry(store, job_id, log)
+        def tick():
+            if progress:
+                progress()
+            observation.tick()
         try:
-            run_process([config["separation_python"], str(Path(__file__).with_name("separation_bridge.py")), str(request_path)], cwd=work, log=log, progress=progress)
+            run_process([config["separation_python"], str(Path(__file__).with_name("separation_bridge.py")), str(request_path)], cwd=work, log=log, progress=tick)
+            observation.tick()
             result = json.loads(Path(request["response"]).read_text())
             produced = []
             for name in result["outputs"]:

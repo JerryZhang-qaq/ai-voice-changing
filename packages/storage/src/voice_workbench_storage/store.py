@@ -31,6 +31,20 @@ ROLES = {"source", "cache", "dataset", "model", "export"}
 ACTIVE = {"queued", "running"}
 
 
+def singer_name(value):
+    value = str(value).strip()
+    if (not value or len(value) > 80 or value in {".", ".."} or
+            re.search(r'[<>:"/\\|?*\x00-\x1f]', value) or value.endswith((".", " ")) or
+            value.split(".")[0].upper() in {"CON", "PRN", "AUX", "NUL", *{f"{p}{i}" for p in ("COM", "LPT") for i in range(1, 10)}}):
+        raise ValueError("歌手名字不能为空，且不能包含 Windows 文件夹名中的非法字符")
+    return value
+
+
+def readable_stem(value, limit=64):
+    value = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "-", str(value)).strip(" .")[:limit]
+    return value or "音频"
+
+
 def is_reference(path):
     return path.is_symlink() or (hasattr(path, "is_junction") and path.is_junction())
 
@@ -87,21 +101,59 @@ class ArtifactStore:
             db.close()
 
     def _path(self, relative: str) -> Path:
-        if not re.fullmatch(r"[0-9a-f]{32}(?:\.[A-Za-z0-9]{1,12})?", relative):
+        parts = relative.split("/")
+        valid = bool(re.fullmatch(r"(?:[^<>:\"/\\|?*\x00-\x1f]{1,80}__)?[0-9a-f]{32}(?:\.[A-Za-z0-9]{1,12})?", parts[-1]))
+        if len(parts) > 1:
+            valid = valid and len(parts) in {4, 5} and parts[0] == "歌手" and parts[2] in {"原始素材", "转换素材", "切片数据集", "处理中间文件"}
+            if valid:
+                valid = singer_name(parts[1]) == parts[1] and (len(parts) == 4 or bool(re.fullmatch(r"(?:[^<>:\"/\\|?*\x00-\x1f]{1,80}__)?[0-9a-f]{32}", parts[3])))
+        if not valid:
             raise Conflict("无效的产物路径")
         path = self.files / relative
-        if is_reference(self.files) or is_reference(path):
+        if any(is_reference(p) for p in (path, *path.parents) if p == self.files or self.files in p.parents):
             raise Conflict("拒绝访问符号链接产物")
-        if path.resolve().parent != self.files.resolve():
+        if not path.resolve().is_relative_to(self.files.resolve()):
             raise Conflict("产物路径越界")
         return path
+
+    def _placement(self, relative, role, metadata, job_id, name=None):
+        metadata = dict(metadata or {})
+        parent_id = metadata.get("source_id") or metadata.get("parent_id") or metadata.get("dataset_id")
+        inherited = {}
+        if parent_id:
+            try:
+                inherited = self.get(parent_id)["metadata"]
+            except NotFound:
+                pass
+        if job_id:
+            inherited = {**inherited, **self.job(job_id)["metadata"]}
+        for key in ("singer", "purpose", "folder_name"):
+            if key not in metadata and inherited.get(key):
+                metadata[key] = inherited[key]
+        if role == "source":
+            metadata.setdefault("singer", "未分类歌手")
+            metadata.setdefault("purpose", "training")
+        if name:
+            relative = readable_stem(Path(name).stem, 48) + "__" + relative
+        if metadata.get("singer") and role not in {"model", "export"}:
+            name = singer_name(metadata["singer"])
+            category = "转换素材" if metadata.get("purpose") == "conversion" and role == "source" else "原始素材" if role == "source" else "切片数据集" if metadata.get("interval") or metadata.get("kind") == "dataset_manifest" else "处理中间文件"
+            version = metadata.get("version_id") or job_id or metadata.get("parent_id")
+            if version and not re.fullmatch(r"[0-9a-f]{32}", version):
+                version = None
+            if version and category == "切片数据集":
+                label = "ready" if metadata.get("kind") == "dataset_manifest" and metadata.get("parent_id") else "after"
+                group = Path(name).stem if name and metadata.get("kind") == "dataset_manifest" else f"{metadata['singer']}-{label}"
+                version = readable_stem(group, 48) + "__" + version
+            relative = "/".join(["歌手", name, category, *([version] if version and role != "source" else []), relative])
+        return relative, metadata
 
     @staticmethod
     def _artifact(row):
         d = dict(row)
         d["metadata"] = json.loads(d["metadata"])
         d["retained"] = bool(d["retained"])
-        d.pop("path", None)
+        d["location"] = d.pop("path", None)
         return d
 
     def import_file(self, source: Path | str, **kwargs):
@@ -116,8 +168,9 @@ class ArtifactStore:
         suffix = Path(name).suffix.lower()
         if not re.fullmatch(r"\.[a-z0-9]{1,12}", suffix):
             suffix = ""
-        relative = artifact_id + suffix
+        relative, metadata = self._placement(artifact_id + suffix, role, metadata, job_id, name)
         target = self._path(relative)
+        target.parent.mkdir(parents=True, exist_ok=True)
         digest, size = hashlib.sha256(), 0
         temp = None
         try:
@@ -156,7 +209,9 @@ class ArtifactStore:
     def allocate_workspace(self, job_id, *, name, metadata=None):
         aid = uuid.uuid4().hex
         relative = aid + ".dir"
+        relative, metadata = self._placement(relative, "cache", metadata, job_id, name)
         path = self._path(relative)
+        path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with self.connect(write=True) as db:
                 if not db.execute("SELECT 1 FROM jobs WHERE id=? AND status IN ('queued','running')", (job_id,)).fetchone():
@@ -312,7 +367,9 @@ class ArtifactStore:
             except Conflict:
                 d["exists"] = False
                 reasons.append("unsafe_path")
-            d.update(cleanable=not reasons, protection=reasons)
+            d.update(cleanable=not reasons, protection=reasons,
+                     manual_cleanable=d["role"] == "cache" and "active_job" not in reasons and "unsafe_path" not in reasons,
+                     deletable="active_job" not in reasons and "unsafe_path" not in reasons)
             result.append(d)
         return result
 
@@ -329,20 +386,38 @@ class ArtifactStore:
         ids = set(artifact_ids) if artifact_ids is not None else None
         return [i for i in items if (ids is None or i["id"] in ids) and (job_id is None or i["job_id"] == job_id)]
 
-    def preview(self, *, artifact_ids=None, job_id=None):
+    def preview(self, *, artifact_ids=None, job_id=None, force=False):
         items = self._select(self.inventory()["items"], artifact_ids=artifact_ids, job_id=job_id)
+        if force:
+            for item in items:
+                item["cleanable"] = item["manual_cleanable"]
         return {"items": items, "reclaimable_bytes": sum(i["size"] for i in items if i["cleanable"] and i["exists"]),
-                "cleanable_count": sum(i["cleanable"] for i in items)}
+                "cleanable_count": sum(i["cleanable"] for i in items), "affected_datasets": self.affected_datasets([i["id"] for i in items if i["cleanable"]])}
 
-    def cleanup(self, *, artifact_ids=None, job_id=None):
+    def cleanup(self, *, artifact_ids=None, job_id=None, force=False, progress=None):
         # Recompute eligibility under the same writer lock used to acquire job holds.
         with self.connect(write=True) as db:
             items = self._select(self._inventory(db), artifact_ids=artifact_ids, job_id=job_id)
+            if force:
+                for item in items:
+                    item["cleanable"] = item["manual_cleanable"]
             eligible = [i for i in items if i["cleanable"]]
             for i in eligible:
                 db.execute("UPDATE artifacts SET state='deleting' WHERE id=?", (i["id"],))
+        return self._delete_selected(eligible, items, progress)
+
+    def _delete_selected(self, eligible, items, progress=None):
         deleted, errors, reclaimed = [], [], 0
-        for i in eligible:
+        eligible_ids = {i["id"] for i in eligible}
+        for index, i in enumerate(eligible):
+            if progress:
+                try:
+                    progress(index, len(eligible))
+                except BaseException:
+                    with self.connect(write=True) as db:
+                        for pending in eligible[index:]:
+                            db.execute("UPDATE artifacts SET state='ready' WHERE id=? AND state='deleting'", (pending["id"],))
+                    raise
             try:
                 reclaimed += self._finish_delete(i["id"])
                 deleted.append(i["id"])
@@ -352,7 +427,52 @@ class ArtifactStore:
                     db.execute("UPDATE artifacts SET state='ready' WHERE id=? AND state='deleting'", (i["id"],))
                 errors.append({"id": i["id"], "error": str(e)})
         return {"deleted_ids": deleted, "reclaimed_bytes": reclaimed,
-                "skipped": [{"id": i["id"], "protection": i["protection"]} for i in items if not i["cleanable"]], "errors": errors}
+                "skipped": [{"id": i["id"], "protection": i["protection"]} for i in items if i["id"] not in eligible_ids], "errors": errors}
+
+    def affected_datasets(self, artifact_ids):
+        ids, affected = set(artifact_ids), []
+        for item in self.inventory()["items"]:
+            if item["metadata"].get("kind") != "dataset_manifest" or not item["exists"]:
+                continue
+            try:
+                manifest = json.loads(self.path(item["id"]).read_text(encoding="utf-8"))
+            except (ValueError, OSError, NotFound):
+                continue
+            clips = [c for c in manifest.get("clips", []) if c["artifact_id"] in ids]
+            sources = [s for s in manifest.get("sources", []) if ids.intersection({s.get("id"), s.get("master_id"), s.get("original_id")})]
+            if clips or sources or item["id"] in ids:
+                affected.append({"id": item["id"], "name": item["name"], "clip_count": len(clips), "source_count": len(sources)})
+        return affected
+
+    def deletion_preview(self, artifact_ids):
+        if not artifact_ids:
+            raise ValueError("请选择要永久删除的文件")
+        items = self._select(self.inventory()["items"], artifact_ids=artifact_ids)
+        return {"items": items, "cleanable_count": sum(i["deletable"] for i in items),
+                "reclaimable_bytes": sum(i["size"] for i in items if i["deletable"] and i["exists"]),
+                "affected_datasets": self.affected_datasets(artifact_ids)}
+
+    def delete_artifacts(self, artifact_ids, progress=None):
+        if not artifact_ids:
+            raise ValueError("请选择要永久删除的文件")
+        with self.connect(write=True) as db:
+            items = self._select(self._inventory(db), artifact_ids=artifact_ids)
+            eligible = [i for i in items if i["deletable"]]
+            for item in eligible:
+                db.execute("UPDATE artifacts SET state='deleting' WHERE id=?", (item["id"],))
+        return self._delete_selected(eligible, items, progress)
+
+    def training_folders(self):
+        groups = {}
+        for item in self.inventory()["items"]:
+            if item["role"] != "source" or item["metadata"].get("purpose", "training") != "training":
+                continue
+            singer = item["metadata"].get("singer", "未分类歌手")
+            group = groups.setdefault(singer, {"singer": singer, "source_ids": [], "items": [], "bytes": 0})
+            group["source_ids"].append(item["id"])
+            group["items"].append(item)
+            group["bytes"] += item["size"]
+        return sorted(groups.values(), key=lambda group: group["singer"].casefold())
 
     def _finish_delete(self, artifact_id):
         with self.connect(write=True) as db:
@@ -366,6 +486,13 @@ class ArtifactStore:
             else:
                 path.unlink(missing_ok=True)
             db.execute("UPDATE artifacts SET state='deleted' WHERE id=?", (artifact_id,))
+            parent = path.parent
+            while parent != self.files and self.files in parent.parents:
+                try:
+                    parent.rmdir()
+                except OSError:
+                    break
+                parent = parent.parent
             return size
 
     @staticmethod

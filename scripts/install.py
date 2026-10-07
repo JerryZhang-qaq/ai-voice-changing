@@ -27,6 +27,21 @@ def environment(directory):
     return interpreter(directory)
 
 
+def ensure_packages(python, arguments, expected):
+    """Skip network resolution when the existing environment already satisfies pins."""
+    import json
+    script = "import importlib.metadata as m,json; names=" + repr(list(expected)) + "; print(json.dumps({n:m.version(n) for n in names}))"
+    result = subprocess.run([str(python), "-c", script], capture_output=True, text=True)
+    try:
+        satisfied = result.returncode == 0 and json.loads(result.stdout) == expected
+    except ValueError:
+        satisfied = False
+    if satisfied:
+        print("复用已安装依赖：", ", ".join(expected), flush=True)
+    else:
+        run([python, "-m", "pip", "install", *arguments])
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--engines", action="store_true", help="安装 GPU 引擎")
@@ -66,7 +81,7 @@ def main():
     for engine in ("rvc", "separation"):
         ep = environment(runtime / "venvs" / engine)
         run([ep, "-m", "pip", "install", "setuptools==80.9.0", "wheel==0.45.1"])
-        run([ep, "-m", "pip", "install", f"torch==2.7.1+{flavor}", f"torchaudio==2.7.1+{flavor}", f"torchvision==0.22.1+{flavor}", "--index-url", f"https://download.pytorch.org/whl/{flavor}"])
+        ensure_packages(ep, [f"torch==2.7.1+{flavor}", f"torchaudio==2.7.1+{flavor}", f"torchvision==0.22.1+{flavor}", "--index-url", f"https://download.pytorch.org/whl/{flavor}"], {"torch":f"2.7.1+{flavor}","torchaudio":f"2.7.1+{flavor}","torchvision":f"0.22.1+{flavor}"})
         if engine == "rvc":
             run([ep, "-m", "pip", "install", "-r", ROOT / "scripts/rvc-requirements.txt", "--index-url", "https://pypi.org/simple"])
         else:

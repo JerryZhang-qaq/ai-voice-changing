@@ -32,6 +32,9 @@ def main():
     for language in ("cn", "jp"):
         store = ArtifactStore(Path(__import__('os').environ.get('WORKBENCH_RUNTIME', ROOT / 'runtime')) if args.import_workbench else output / language)
         ids, originals = [], []
+        singer = "Opencpop" if language == "cn" else "NIT-SONG070-F001"
+        existing = {item['sha256']:item for item in store.inventory()['items'] if item['exists'] and item['role']=='source' and item['metadata'].get('singer')==singer and item['metadata'].get('benchmark')}
+
         for entry in catalog["files"]:
             if entry["language"] != language or entry.get("kind") == "song":
                 continue
@@ -40,17 +43,17 @@ def main():
             data = local.read_bytes() if local else urlopen(Request(entry["url"], headers={"User-Agent": "VoiceWorkbench benchmark"}), timeout=30).read()
             if len(data) != entry["size"] or hashlib.sha256(data).hexdigest() != entry["sha256"]:
                 raise RuntimeError(f"素材校验失败：{name}")
-            artifact = store.import_stream(BytesIO(data), name=name, role="source", metadata={"kind": "dry_vocal", "benchmark": True, "source": entry["url"], "license": catalog["groups"][language]["license"]})
+            artifact = existing.get(entry["sha256"]) or store.import_stream(BytesIO(data), name=name, role="source", metadata={"kind": "dry_vocal", "singer": singer, "purpose": "training", "benchmark": True, "source": entry["url"], "license": catalog["groups"][language]["license"]})
             ids.append(artifact["id"])
             x, sr = sf.read(BytesIO(data), dtype="float32")
             originals.append({"name": name, "duration": len(x) / sr, "sample_rate": sr, "sha256": entry["sha256"]})
         if not ids:
             raise RuntimeError(f"没有 {language} 素材")
-        job = store.create_job("dataset_prepare", ids, status="running")
+        job = store.create_job("dataset_prepare", ids, metadata={"singer":singer,"purpose":"training"}, status="running")
         start = time.monotonic()
         aid = prepare_dataset(store, job["id"], ids, SliceConfig(), policy=PreparationPolicy("review", True))
         with store.connect(write=True) as db:
-            db.execute("UPDATE artifacts SET name=? WHERE id=?", (catalog["groups"][language]["name"] + "首测数据集.json", aid))
+            db.execute("UPDATE artifacts SET name=? WHERE id=?", (singer + "-after.json", aid))
         store.update_job(job["id"], "completed", metadata={"result_id": aid})
         manifest = json.loads(store.path(aid).read_text(encoding="utf-8"))
         covered = sum((c["valid_end_sample"] - c["valid_start_sample"]) / c["sample_rate"] for c in manifest["clips"])

@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 import numpy as np
 
 
-ADMISSION_VERSION = "solo-first-alpha-1"
+ADMISSION_VERSION = "solo-first-alpha-2"
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,9 @@ def decide_clip(policy, metrics, reasons, voice, harmony):
     reasons = list(dict.fromkeys(reasons))
     evidence = {"version": ADMISSION_VERSION, "mode": policy.mode, "solo_confirmed": policy.solo_confirmed,
                 "identity_check": "out_of_scope", "threshold_validation": "alpha", "harmony_status": harmony.get("status", "not_checked")}
-    excluded = {"EXACT_DUPLICATE", "LOW_SIGNAL", "SEVERE_CLIPPING", "COMPLEX_HARMONY"}
+    excluded = {"EXACT_DUPLICATE", "LOW_SIGNAL", "SEVERE_CLIPPING", "COMPLEX_HARMONY", "CLIP_UNDER_ONE_SECOND"}
+    if metrics.get("duration", 1) < 1:
+        reasons.append("CLIP_UNDER_ONE_SECOND")
     if metrics["rms_db"] < -70:
         reasons.append("LOW_SIGNAL")
     if metrics.get("plateau_ratio", 0) > .01:

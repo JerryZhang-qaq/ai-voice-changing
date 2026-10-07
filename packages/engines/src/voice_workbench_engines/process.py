@@ -42,6 +42,8 @@ def run_process(command, *, cwd: Path, log: Path, progress=None, timeout=7200, e
                     progress()
                 time.sleep(.25)
             record("engine_exited", exit_code=process.returncode)
+            if progress:
+                progress()
             if process.returncode:
                 raise EngineError(f"引擎执行失败，退出码 {process.returncode}，请查看任务日志")
         finally:

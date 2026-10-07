@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { api, json } from './api';
 
+import { JobProgress, useTask } from './JobProgress';
+
 interface Model { id: string; name: string; task: string; ready: boolean; downloaded: boolean; validated: boolean; evidence: string; }
 interface Engines { separation: { environment: { ready: boolean; reason?: string; gpu_name?: string }; models: Model[]; recommended_package: string }; }
 interface Artifact { id: string; name: string; role: string; metadata: { kind?: string; stem?: string }; }
 
 export function SeparationPanel() {
+  const task=useTask('separation');
   const [engines, setEngines] = useState<Engines | null>(null);
   const [items, setItems] = useState<Artifact[]>([]);
   const [source, setSource] = useState('');
@@ -28,8 +31,9 @@ export function SeparationPanel() {
       {spec && <p>{spec.evidence}</p>}
       {spec?.task === 'lead_backing' && <p>先使用人声/伴奏模型获得人声音轨，再分离主唱与和声。和声仍可能残留，需要试听。</p>}
       <div className="toolbar"><label>分块长度 <input className="number" type="number" min="64" max="512" value={segment} onChange={e => setSegment(Number(e.target.value))}/></label><label>重叠 <input className="number" type="number" min="2" max="50" value={overlap} onChange={e => setOverlap(Number(e.target.value))}/></label>
-        <button disabled={busy || !source || !spec?.ready} onClick={() => { setBusy(true); setError(''); void api<{id: string}>('/separation', json({source_id: source, model_id: model, segment_size: segment, overlap})).then(j => setMessage(`任务 ${j.id.slice(0,12)} 已提交。`)).catch(e => setError(e.message)).finally(() => setBusy(false)); }}>开始处理</button>
+        <button disabled={busy || task.running || !source || !spec?.ready} onClick={() => { setBusy(true); setError(''); void api<{id: string}>('/separation', json({source_id: source, model_id: model, segment_size: segment, overlap})).then(j=>{task.track(j);setMessage('分离任务已提交。');}).catch(e => setError(e.message)).finally(() => setBusy(false)); }}>开始处理</button>
       </div>
+      <JobProgress id={task.id} onComplete={()=>void refresh().catch(e=>setError(e.message))}/>
     </article>
     <article className="card"><h3>分离产物</h3>{items.filter(i => i.metadata.kind === 'separated_audio').map(i => <div className="clip" key={i.id}><strong>{i.name}</strong><audio controls preload="none" src={`/api/artifacts/${i.id}/file`}/><a href={`/api/artifacts/${i.id}/file`} download>下载音轨</a></div>)}</article>
   </section>;

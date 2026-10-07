@@ -30,6 +30,8 @@ def test_export_contains_only_accepted_audio_and_grouped_manifest(tmp_path):
     assert complete["status"] == "completed", complete
     content = client.get(f'/api/artifacts/{complete["metadata"]["result_id"]}/file').content
     with zipfile.ZipFile(BytesIO(content)) as archive:
-        assert archive.namelist() == [f'train/{clip["artifact_id"]}.wav', "manifest.json"]
+        audio_names = [name for name in archive.namelist() if name.endswith('.wav')]
+        assert len(audio_names) == 1 and audio_names[0].startswith('未分类歌手-ready/train/')
+        assert 'vocal' in audio_names[0] and clip['artifact_id'] not in audio_names[0]
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["validation"]["status"] == "unavailable_single_source"

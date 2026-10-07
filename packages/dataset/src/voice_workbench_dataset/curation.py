@@ -6,6 +6,12 @@ import zipfile
 
 
 def assign_split(manifest):
+    for clip in manifest["clips"]:
+        if clip.get("duration", 1) < 1:
+            clip["status"] = "excluded"
+            clip["reasons"] = list(dict.fromkeys([*clip.get("reasons", []), "CLIP_UNDER_ONE_SECOND"]))
+    for status in ("accepted", "review", "excluded"):
+        manifest["summary"][f"{status}_count"] = sum(c["status"] == status for c in manifest["clips"])
     accepted = [c for c in manifest["clips"] if c["status"] == "accepted"]
     # Exact and suspected duplicate relationships include excluded/review clips:
     # rejecting a copy does not make its source independent of the other source.
@@ -46,25 +52,33 @@ def assign_split(manifest):
     return manifest
 
 
-def export_dataset(store, job_id, dataset_id, progress=None):
+def export_dataset(store, job_id, dataset_id, progress=None, *, prepared=False):
     manifest = json.loads(store.path(dataset_id).read_text(encoding="utf-8"))
     assign_split(manifest)
-    accepted = [c for c in manifest["clips"] if c["status"] == "accepted"]
+    accepted = [c for c in manifest["clips"] if c["status"] != "excluded"] if prepared else [c for c in manifest["clips"] if c["status"] == "accepted"]
     if not accepted:
         raise ValueError("没有已接受的片段，不能导出训练数据")
-    if len({c["duplicate_group"] for c in accepted}) != len(accepted):
+    if not prepared and len({c["duplicate_group"] for c in accepted}) != len(accepted):
         raise ValueError("已接受片段包含完全重复音频，请先排除重复项")
     validation = set(manifest["split"]["validation"])
+    from voice_workbench_storage.store import readable_stem
+    singer = manifest.get("singer", store.get(dataset_id)["metadata"].get("singer", "未分类歌手"))
+    label = readable_stem(singer) + ("-after" if prepared else "-ready")
     with tempfile.TemporaryDirectory(dir=store.root, prefix=f"processing-{job_id}-") as temp:
         archive_path = Path(temp) / "dataset.zip"
         # PCM/audio is already large; no expensive compression during export.
         with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
             for index, clip in enumerate(accepted):
+                import soundfile as sf
+                info = sf.info(store.path(clip["artifact_id"]))
+                if info.frames < info.samplerate:
+                    raise ValueError("不足 1 秒的切片不能导出为训练数据")
                 if progress:
                     progress(index, len(accepted))
-                folder = "validation" if clip["artifact_id"] in validation else "train"
-                clip["export_path"] = f'{folder}/{clip["artifact_id"]}.wav'
+                folder = "clips" if prepared else "validation" if clip["artifact_id"] in validation else "train"
+                original = store.get(clip["artifact_id"])["name"]
+                clip["export_path"] = f'{label}/{folder}/{index + 1:05d}-{readable_stem(Path(original).stem)}.wav'
                 archive.write(store.path(clip["artifact_id"]), clip["export_path"])
             archive.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
-        return store.import_file(archive_path, name="训练数据集.zip", role="export", job_id=job_id,
-                                 max_bytes=20 * 1024**3, metadata={"kind": "dataset_export", "dataset_id": dataset_id, "summary": manifest["summary"]})["id"]
+        return store.import_file(archive_path, name=f"{label}.zip", role="export", job_id=job_id,
+                                 max_bytes=20 * 1024**3, metadata={"kind": "dataset_prepared_export" if prepared else "dataset_export", "dataset_id": dataset_id, "singer": singer, "summary": manifest["summary"]})["id"]
