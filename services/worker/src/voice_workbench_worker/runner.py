@@ -14,6 +14,8 @@ from voice_workbench_dataset.quality import guard_cleaning
 from voice_workbench_dataset.admission import PreparationPolicy
 from voice_workbench_dataset.harmony import check_harmony
 from voice_workbench_engines.registry import SEPARATION_MODELS
+from voice_workbench_engines.separation_session import SeparationSession
+from .batch_progress import BatchProgress
 
 
 class Cancelled(Exception):
@@ -41,7 +43,7 @@ def run_one(store: ArtifactStore):
         changed = current["metadata"].get("stage") != stage
         if changed or time.monotonic() - last_write[0] > .5 or done == total and total is not None:
             values = {"stage": stage}
-            if changed or total is not None:
+            if (changed or total is not None) and not current["metadata"].get("batch_progress"):
                 values.update(done=done, total=total, eta_seconds=None, unit=None)
             store.update_job(job["id"], "running", metadata=values)
             last_write[:] = [time.monotonic(), stage]
@@ -60,40 +62,47 @@ def run_one(store: ArtifactStore):
             options = config.get("preprocessing", {})
             policy = PreparationPolicy(**config.get("policy", {}))
             policy.validate()
-            processed = []
-            processing_records = []
-            for aid in config["source_ids"]:
-                source = store.get(aid)
-                record = {"original_id": aid, "stages": []}
-                steps = []
-                if source["metadata"].get("kind") == "song" or options.get("force_vocal_separation"):
-                    steps.append(("vocals_melband_unwa", "vocals", "提取训练人声"))
-                if options.get("separate_backing") or options.get("check_harmony") or policy.mode == "automatic":
-                    steps.append(("lead_melband_aufr33", "harmony_check", "筛除复杂和声"))
-                if options.get("dereverb"):
-                    steps.append(("dereverb_melband_anvuew", "dry", "温和去混响"))
-                if options.get("denoise"):
-                    steps.append(("denoise_melband_aufr33", "clean", "按需降噪"))
-                for model_id, stem, stage in steps:
-                    outputs = separate(store, job["id"], aid, model_id, progress=lambda: progress(stage, len(processed), len(config["source_ids"])))
-                    if stem == "harmony_check":
-                        record["harmony"] = check_harmony(store, job["id"], aid, outputs,
-                                                         lambda: progress("检查重叠人声", len(processed), len(config["source_ids"])))
-                        if record["harmony"]["status"] == "rejected":
-                            break
-                        # Passing the screening does not require replacing a
-                        # good solo recording with a potentially altered stem.
-                        continue
-                    comparison = guard_cleaning(store, job["id"], aid, outputs[stem], SEPARATION_MODELS[model_id]["task"],
-                                                lambda: progress("检查清洗前后变化", len(processed), len(config["source_ids"])))
-                    # Weight hashes and engine parameters live on the output
-                    # artifact. Freeze them in the manifest before cache cleanup.
-                    comparison["engine"] = store.get(outputs[stem])["metadata"]
-                    record["stages"].append(comparison)
-                    aid = comparison["selected_id"]
-                processed.append(aid)
-                processing_records.append(record)
-            result = prepare_dataset(store, job["id"], processed, SliceConfig(**config["config"]), progress, processing_records=processing_records, policy=policy)
+            originals = [store.get(aid) for aid in config["source_ids"]]
+            processed = list(config["source_ids"])
+            processing_records = [{"original_id": aid, "stages": []} for aid in processed]
+            all_indices = list(range(len(processed)))
+            vocal_indices = [i for i, source in enumerate(originals) if source["metadata"].get("kind") == "song" or options.get("force_vocal_separation")]
+            steps = [("vocals_melband_unwa", "vocals", "提取训练人声", vocal_indices)]
+            if options.get("dereverb"):
+                steps.append(("dereverb_melband_anvuew", "dry", "温和去混响", all_indices))
+            if options.get("denoise"):
+                steps.append(("denoise_melband_aufr33", "clean", "按需降噪", all_indices))
+            phases = [(stem, label, indices) for _, stem, label, indices in steps if indices] + [("slicing", "分析、切片与逐片检查", all_indices)]
+            batch = BatchProgress(store, job["id"], phases, originals)
+            with SeparationSession(store, job["id"]) as session:
+                for model_id, stem, stage, indices in steps:
+                    for index in indices:
+                        batch.begin(stem, index)
+                        aid = processed[index]
+                        outputs = separate(store, job["id"], aid, model_id, keep_stems=[stem], session=session,
+                                           profile=options.get("profile", "balanced"), reuse_quality_cache=options.get("reuse_quality_cache", True),
+                                           progress=lambda: progress(stage))
+                        comparison = guard_cleaning(store, job["id"], aid, outputs[stem], SEPARATION_MODELS[model_id]["task"],
+                                                    lambda: progress("检查清洗前后变化"))
+                        comparison["engine"] = store.get(outputs[stem])["metadata"]
+                        processing_records[index]["stages"].append(comparison)
+                        processed[index] = comparison["selected_id"]
+                        batch.finish()
+
+                def review_harmony(clip_id):
+                    tick = lambda: progress("切片和声辅助检查")
+                    outputs = separate(store, job["id"], clip_id, "lead_melband_aufr33", progress=tick, session=session,
+                                       profile=options.get("profile", "balanced"))
+                    return check_harmony(store, job["id"], clip_id, outputs, tick)
+
+                def source_progress(index, state):
+                    batch.begin("slicing", index) if state == "start" else batch.finish()
+
+                result = prepare_dataset(store, job["id"], processed, SliceConfig(**config["config"]), progress,
+                                         processing_records=processing_records, policy=policy,
+                                         harmony_checker=review_harmony if options.get("check_harmony") or options.get("separate_backing") else None,
+                                         source_progress=source_progress, clip_progress=batch.clip)
+                batch.complete()
         elif job["kind"] == "dataset_edit":
             from voice_workbench_dataset.editing import edit_clip
             result = edit_clip(store, job["id"], progress=progress, **config)
@@ -101,18 +110,18 @@ def run_one(store: ArtifactStore):
             source = store.get(config["source_id"])
             if source["metadata"].get("kind") == "song":
                 progress("分离人声与伴奏")
-                outputs = separate(store, job["id"], config["source_id"], "vocals_melband_unwa", segment_size=config["segment_size"], overlap=config["overlap"], progress=lambda: progress("分离人声与伴奏"))
+                outputs = separate(store, job["id"], config["source_id"], "vocals_melband_unwa", segment_size=config["segment_size"], overlap=config["overlap"], profile=config.get("profile", "balanced"), progress=lambda: progress("分离人声与伴奏"))
             else:
                 outputs = {"vocals": config["source_id"]}
             store.update_job(job["id"], "running", metadata={"outputs": outputs})
             progress("分离主唱与和声")
-            outputs.update(separate(store, job["id"], outputs["vocals"], "lead_melband_aufr33", segment_size=config["segment_size"], overlap=config["overlap"], progress=lambda: progress("分离主唱与和声")))
+            outputs.update(separate(store, job["id"], outputs["vocals"], "lead_melband_aufr33", segment_size=config["segment_size"], overlap=config["overlap"], profile=config.get("profile", "balanced"), progress=lambda: progress("分离主唱与和声")))
             store.update_job(job["id"], "running", metadata={"outputs": outputs})
             result = outputs["lead"]
         elif job["kind"] == "separation":
             progress("加载分离引擎")
             outputs = separate(store, job["id"], config["source_id"], config["model_id"],
-                               segment_size=config["segment_size"], overlap=config["overlap"], progress=lambda: progress("分离处理中"))
+                               segment_size=config["segment_size"], overlap=config["overlap"], profile=config.get("profile", "balanced"), progress=lambda: progress("分离处理中"))
             result = next(iter(outputs.values()))
             store.update_job(job["id"], "running", metadata={"outputs": outputs})
         elif job["kind"] == "rvc_train":
@@ -127,11 +136,11 @@ def run_one(store: ArtifactStore):
             result = export_dataset(store, job["id"], config["dataset_id"], lambda done,total: progress("导出音频合集", done, total), prepared=config.get("prepared", False))
         elif job["kind"] == "cover":
             progress("分离人声与伴奏")
-            stems = separate(store, job["id"], config["source_id"], config["separation_model"], segment_size=config["segment_size"], overlap=config["overlap"], progress=lambda: progress("分离人声与伴奏"))
+            stems = separate(store, job["id"], config["source_id"], config["separation_model"], segment_size=config["segment_size"], overlap=config["overlap"], profile=config.get("profile", "balanced"), progress=lambda: progress("分离人声与伴奏"))
             store.update_job(job["id"], "running", metadata={"outputs": stems})
             if config.get("separate_backing", True) or config.get("include_backing"):
                 progress("分离主唱与和声")
-                stems.update(separate(store, job["id"], stems["vocals"], "lead_melband_aufr33", segment_size=config["segment_size"], overlap=config["overlap"], progress=lambda: progress("分离主唱与和声")))
+                stems.update(separate(store, job["id"], stems["vocals"], "lead_melband_aufr33", segment_size=config["segment_size"], overlap=config["overlap"], profile=config.get("profile", "balanced"), progress=lambda: progress("分离主唱与和声")))
                 store.update_job(job["id"], "running", metadata={"outputs": stems})
             progress("RVC 音色转换")
             vocal = convert(store, job["id"], stems.get("lead", stems["vocals"]), config["model_id"], index_id=config["index_id"], pitch=config["pitch"],

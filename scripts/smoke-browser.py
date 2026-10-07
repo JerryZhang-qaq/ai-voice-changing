@@ -1,4 +1,4 @@
-"""0.0.3 browser workflow check; fixture runs explicitly identify GPU substitutes."""
+"""0.0.4 browser workflow check; fixture runs explicitly identify GPU substitutes."""
 import argparse
 import json
 from pathlib import Path
@@ -28,20 +28,25 @@ def main():
         page.get_by_role('heading',name='训练素材与数据集',exact=True).wait_for()
         page.get_by_label('训练音源文件夹',exact=True).set_input_files(str(folder))
         assert page.get_by_label('训练歌手名字',exact=True).input_value()=='Aimer'
-        page.get_by_role('combobox',name='文件夹内音源类型').select_option('dry_vocal')
+        page.get_by_role('combobox',name='文件夹内音源类型').select_option('song')
         page.get_by_role('button',name='导入整个文件夹',exact=True).click()
         page.get_by_role('status').filter(has_text='已导入 1 个音源').wait_for()
         assert page.get_by_label('训练素材文件夹',exact=True).input_value()=='Aimer'
-        page.get_by_role('checkbox',name='我确认文件夹内均为该歌手的独唱素材').check()
+        page.get_by_role('checkbox',name='我确认文件夹内素材均属于该歌手').check()
+        assert page.get_by_label('分离速度与质量',exact=True).input_value()=='balanced'
+        assert not page.get_by_role('checkbox',name='切片和声辅助检查（可选，增加耗时）').is_checked()
         page.get_by_role('button',name='批量自动处理整个文件夹',exact=True).click()
         page.get_by_role('progressbar',name='批量准备训练数据进度').wait_for()
+        page.get_by_role('progressbar',name='当前步骤进度',exact=True).wait_for()
+        page.get_by_text('第 1 / 1 首 · singing.wav',exact=True).wait_for()
+        page.screenshot(path=str(args.output/'batch-progress.png'),full_page=True)
 
-        def complete(kind):
+        def complete(kind, previous_id=None):
             deadline=time.monotonic()+90
             while time.monotonic()<deadline:
                 jobs=page.request.get(args.url+'/api/jobs').json()
                 job=next((j for j in jobs if j['kind']==kind),None)
-                if job and job['status'] not in {'queued','running'}:
+                if job and job['id']!=previous_id and job['status'] not in {'queued','running'}:
                     assert job['status']=='completed',job
                     return job
                 page.wait_for_timeout(300)
@@ -50,7 +55,8 @@ def main():
         page.get_by_label('选择数据集',exact=True).select_option(prepared)
         page.get_by_role('group',name='片段 1 审查决定',exact=True).wait_for()
         page.get_by_role('button',name='下载处理后干声合集',exact=True).click()
-        export=complete('dataset_export')['metadata']['result_id']
+        first_export=complete('dataset_export')
+        export=first_export['metadata']['result_id']
         assert page.request.get(args.url+f'/api/artifacts/{export}/file').status==200
         page.get_by_role('group',name='片段 1 审查决定',exact=True).get_by_role('button',name='Y · 接受',exact=True).click()
         group=page.get_by_role('group',name='片段 2 审查决定',exact=True)
@@ -61,7 +67,7 @@ def main():
         manifest=page.request.get(args.url+f'/api/datasets/{reviewed}').json()
         assert manifest['summary']['accepted_count']>=1
         page.get_by_role('button',name='导出已接受数据集',exact=True).click()
-        export=complete('dataset_export')['metadata']['result_id']
+        export=complete('dataset_export',first_export['id'])['metadata']['result_id']
         # Wait for the newest export instead of returning a prior completed job.
         page.wait_for_function("()=>document.querySelectorAll('.task-completed').length>=2")
         page.get_by_role('button',name='波形与边界编辑',exact=True).first.click()
@@ -119,7 +125,7 @@ def main():
         accepted=[c['artifact_id'] for c in manifest['clips'] if c['status']=='accepted']
         assert all(page.request.get(args.url+f'/api/artifacts/{aid}/file').status==200 for aid in accepted)
         assert not errors and not failures,{'errors':errors,'failures':failures}
-        report={'status':'passed','version':'0.0.3','pages':8,'fixture_gpu_cores':args.fixture,'checks':['folder import','singer inference','batch prepare inline progress','Y/N review','readable after/ready ZIP','waveform','fixed sidebar','training/conversion isolation','stem downloads','download modal','manual cache cleanup','accepted clip protection'],'console_errors':errors,'server_errors':failures}
+        report={'status':'passed','version':'0.0.4','pages':8,'fixture_gpu_cores':args.fixture,'checks':['folder import','singer inference','balanced default','optional clip harmony','batch and engine inline progress','current source name','Y/N review','readable after/ready ZIP','waveform','fixed sidebar','training/conversion isolation','stem downloads','download modal','manual cache cleanup','accepted clip protection'],'console_errors':errors,'server_errors':failures}
         (args.output/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))
         browser.close()
         print(json.dumps(report,ensure_ascii=False))

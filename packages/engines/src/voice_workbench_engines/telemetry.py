@@ -11,8 +11,9 @@ import time
 
 
 class LogTelemetry:
-    def __init__(self, store, job_id, path, stage=None):
+    def __init__(self, store, job_id, path, stage=None, namespace=None):
         self.store, self.job_id, self.path, self.stage = store, job_id, Path(path), stage
+        self.namespace = namespace
         self.offset = self.path.stat().st_size if self.path.exists() else 0
         self.pending = b""
         self.last_gpu = 0.
@@ -61,6 +62,17 @@ class LogTelemetry:
             elif done > self.baseline[0] and now - self.baseline[1] >= 1:
                 speed = (done - self.baseline[0]) / (now - self.baseline[1])
                 update["eta_seconds"] = max(0, (total - done) / speed)
+        if self.namespace:
+            update = {self.namespace: {**(metadata.get(self.namespace) or {}), **update}}
+            batch = metadata.get("batch_progress")
+            current = update[self.namespace]
+            done, total = current.get("done"), current.get("total")
+            if batch and isinstance(done, (float, int)) and isinstance(total, (float, int)) and total > 0:
+                fraction = min(1, max(0, done / total))
+                if batch.get("clip_total"):
+                    fraction = (batch["clip_index"] - 1 + fraction) / batch["clip_total"]
+                # Leave the final part of each step for export and quality checks.
+                update["batch_progress"] = {**batch, "done": max(batch["done"], batch["completed_steps"] + .95 * fraction)}
         self.store.update_job(self.job_id, "running", metadata=update)
 
     @staticmethod
@@ -80,6 +92,11 @@ class LogTelemetry:
             if isinstance(event.get("step"), int) and event["step"] >= 0:
                 observed["step"] = event["step"]
             return {"training": observed, "done": done, "total": event["epochs"], "unit": "epochs"}
+        if isinstance(event, dict) and event.get("event") == "workbench_separation":
+            values = {key: value for key, value in event.items() if key != "event"}
+            if values.get("state") in {"loading", "ready", "running", "fallback"}:
+                values.update(done=0, total=None, eta_seconds=None)
+            return values
         match = re.search(r"(?:进度[：:]?\s*|\|\s*)(\d+)\s*/\s*(\d+)", line)
         if not match:
             match = re.search(r"\d+%.*?\|\s*(\d+)\s*/\s*(\d+)", line)

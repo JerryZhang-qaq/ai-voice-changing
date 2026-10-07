@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api, json } from './api';
 
 import { JobProgress, useTask } from './JobProgress';
+import { SeparationProfile } from './SeparationProfile';
+import type { Profile } from './SeparationProfile';
 
 interface Model { id: string; name: string; task: string; ready: boolean; downloaded: boolean; validated: boolean; evidence: string; }
 interface Engines { separation: { environment: { ready: boolean; reason?: string; gpu_name?: string }; models: Model[]; recommended_package: string }; }
@@ -14,7 +16,8 @@ export function SeparationPanel() {
   const [source, setSource] = useState('');
   const [model, setModel] = useState('vocals_melband_unwa');
   const [segment, setSegment] = useState(256);
-  const [overlap, setOverlap] = useState(8);
+  const [overlap, setOverlap] = useState(4);
+  const [profile,setProfile]=useState<Profile>('balanced');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -30,8 +33,9 @@ export function SeparationPanel() {
       <select value={model} onChange={e => setModel(e.target.value)} aria-label="选择分离模型">{engines?.separation.models.map(m => <option key={m.id} value={m.id}>{m.name} · {m.downloaded ? '已下载' : '未下载'}</option>)}</select></div>
       {spec && <p>{spec.evidence}</p>}
       {spec?.task === 'lead_backing' && <p>先使用人声/伴奏模型获得人声音轨，再分离主唱与和声。和声仍可能残留，需要试听。</p>}
+      <SeparationProfile value={profile} onChange={value=>{setProfile(value);setOverlap(value==='quality'?8:value==='fast'?2:4);}}/>
       <div className="toolbar"><label>分块长度 <input className="number" type="number" min="64" max="512" value={segment} onChange={e => setSegment(Number(e.target.value))}/></label><label>重叠 <input className="number" type="number" min="2" max="50" value={overlap} onChange={e => setOverlap(Number(e.target.value))}/></label>
-        <button disabled={busy || task.running || !source || !spec?.ready} onClick={() => { setBusy(true); setError(''); void api<{id: string}>('/separation', json({source_id: source, model_id: model, segment_size: segment, overlap})).then(j=>{task.track(j);setMessage('分离任务已提交。');}).catch(e => setError(e.message)).finally(() => setBusy(false)); }}>开始处理</button>
+        <button disabled={busy || task.running || !source || !spec?.ready} onClick={() => { setBusy(true); setError(''); void api<{id: string}>('/separation', json({source_id: source, model_id: model, segment_size: segment, overlap,profile})).then(j=>{task.track(j);setMessage('分离任务已提交。');}).catch(e => setError(e.message)).finally(() => setBusy(false)); }}>开始处理</button>
       </div>
       <JobProgress id={task.id} onComplete={()=>void refresh().catch(e=>setError(e.message))}/>
     </article>

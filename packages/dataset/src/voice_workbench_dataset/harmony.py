@@ -1,7 +1,7 @@
-"""Conservative overlap gate using a mature lead/backing separator's stems.
+"""Optional clip-level harmony evidence for human review.
 
-Complex overlaps reject the entire source. Model leakage and octave ambiguity
-remain review cases; there is no singer recognition or voice clustering.
+Complex overlaps, leakage and octave ambiguity produce review warnings.
+There is no song rejection, singer recognition or voice clustering.
 """
 import hashlib
 import json
@@ -13,7 +13,7 @@ import numpy as np
 from .analysis import analyze_file
 
 
-HARMONY_VERSION = "lead-backing-overlap-1"
+HARMONY_VERSION = "clip-lead-backing-overlap-2"
 
 
 def _longest(mask):
@@ -54,7 +54,7 @@ def assess_harmony(lead, backing):
                          "significant_backing_seconds": float(significant_backing.sum() * .02),
                          "median_backing_to_lead_db": float(np.median(relative_db[active]))}
     if (independent_seconds >= .8 and fraction >= .08) or longest >= 1.2:
-        result.update(status="rejected", reasons=["COMPLEX_HARMONY"])
+        result.update(status="review", reasons=["COMPLEX_HARMONY"])
     elif distinct.sum() >= 10 or (significant_backing.sum() >= 40 and significant_backing.mean() >= .1):
         result["reasons"] = ["HARMONY_UNCERTAIN"]
     else:
@@ -81,6 +81,8 @@ def check_harmony(store, job_id, source_id, stems, progress=None):
                       engine=store.get(stems["lead"])["metadata"])
         path = Path(temporary) / "harmony.json"
         path.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
-        artifact = store.import_file(path, name="独唱和声检查.json", job_id=job_id,
-                                     metadata={"kind": "harmony_report", "cache_key": key})
+        source = store.get(source_id)
+        artifact = store.import_file(path, name=f"{Path(source['name']).stem}-harmony.json", job_id=job_id,
+                                     metadata={"kind": "harmony_report", "scope": "clip", "cache_key": key,
+                                               "source_id": source_id, "singer": source["metadata"].get("singer"), "purpose": "training"})
         return {**result, "report_id": artifact["id"]}

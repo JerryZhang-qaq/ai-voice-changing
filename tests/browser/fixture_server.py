@@ -30,13 +30,17 @@ store.set_runtime('engines', {'rvc': {'ready':True,'environment':{'ready':True,'
 def separation(store, job_id, source_id, model_id, progress=None, **kwargs):
     # Preserve true duration and samples so CPU boundary/harmony code still runs.
     x, sr = sf.read(store.path(source_id), dtype='float32', always_2d=True)
-    stems = ['vocals','instrumental'] if model_id=='vocals_melband_unwa' else ['lead','backing']
+    stems = kwargs.get('keep_stems') or list(SEPARATION_MODELS[model_id]['stems'].values())
+    for chunk in range(10):
+        if progress: progress()
+        store.update_job(job_id,'running',metadata={'engine_progress':{'state':'running','done':chunk,'total':10,'unit':'chunks','parameters':{'profile':kwargs.get('profile','balanced'),'precision':'fp32','overlap':4},'fixture':True}})
+        time.sleep(.2)
     outputs = {}
     for i, stem in enumerate(stems):
         if progress: progress()
         time.sleep(.15)
         content = BytesIO()
-        sf.write(content, x if i==0 else np.zeros_like(x), sr, format='WAV', subtype='FLOAT')
+        sf.write(content, x if stem not in {'instrumental','backing','noise','reverb'} else np.zeros_like(x), sr, format='WAV', subtype='FLOAT')
         name = f"{Path(store.get(source_id)['name']).stem}-{stem}.wav"
         outputs[stem] = store.import_stream(BytesIO(content.getvalue()), name=name, job_id=job_id, metadata={'kind':'separated_audio','stem':stem,'source_id':source_id,'fixture':True})['id']
     return outputs

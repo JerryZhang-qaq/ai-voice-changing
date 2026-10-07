@@ -1,0 +1,104 @@
+{
+  "device": "cpu",
+  "torch": "2.7.1+cpu",
+  "input": "Opencpop official paired mixed sample, 8 second excerpt (audio excluded)",
+  "seconds": 8.0,
+  "cpu_exception": true,
+  "runs": [
+    {
+      "profile": "quality",
+      "outputs": [
+        "vocals.wav"
+      ],
+      "parameters": {
+        "profile": "quality",
+        "precision": "fp32",
+        "attention": "legacy",
+        "segment_size": 256,
+        "overlap": 8,
+        "policy_version": "roformer-speed-1"
+      },
+      "performance": {
+        "elapsed_seconds": 135.936,
+        "load_seconds": 9.71,
+        "inference_seconds": 124.328,
+        "model_reused": false,
+        "fallback_reason": null,
+        "peak_vram_mb": null,
+        "attention_policy": "legacy"
+      },
+      "frames": 352800,
+      "sample_rate": 44100
+    },
+    {
+      "profile": "balanced",
+      "outputs": [
+        "vocals.wav"
+      ],
+      "parameters": {
+        "profile": "balanced",
+        "precision": "fp32",
+        "attention": "legacy",
+        "segment_size": 256,
+        "overlap": 4,
+        "policy_version": "roformer-speed-1"
+      },
+      "performance": {
+        "elapsed_seconds": 72.357,
+        "load_seconds": 0.0,
+        "inference_seconds": 71.323,
+        "model_reused": true,
+        "fallback_reason": null,
+        "peak_vram_mb": null,
+        "attention_policy": "legacy"
+      },
+      "frames": 352800,
+      "sample_rate": 44100,
+      "difference_vs_quality": {
+        "max_absolute": 0.00017774105072021484,
+        "relative_rms": 3.58975121343974e-05
+      }
+    },
+    {
+      "profile": "fast",
+      "outputs": [
+        "vocals.wav"
+      ],
+      "parameters": {
+        "profile": "fast",
+        "precision": "fp32",
+        "attention": "legacy",
+        "segment_size": 256,
+        "overlap": 2,
+        "policy_version": "roformer-speed-1"
+      },
+      "performance": {
+        "elapsed_seconds": 47.515,
+        "load_seconds": 0.0,
+        "inference_seconds": 47.06,
+        "model_reused": true,
+        "fallback_reason": null,
+        "peak_vram_mb": null,
+        "attention_policy": "legacy"
+      },
+      "frames": 352800,
+      "sample_rate": 44100,
+      "difference_vs_quality": {
+        "max_absolute": 0.00017774105072021484,
+        "relative_rms": 6.430247594835237e-05
+      }
+    }
+  ],
+  "limitations": [
+    "短片段数值与速度检查，音质需 A/B 试听",
+    "CPU 模式只比较重叠，不测 CUDA 混合精度或融合注意力",
+    "Single short CPU input; no CUDA AMP, selected GPU kernel, blind listening or full batch measurement",
+    "Compare inference time separately: first run loads weights, later runs reuse weights"
+  ],
+  "version": "0.0.4",
+  "audio_separator": "0.47.0",
+  "model_hashes": {
+    "mel_band_roformer_kim_ft3_unwa.ckpt": "1b10db0095c42576a32aeb3a1c8054af9dea0333e1c38477091d78316a007e52",
+    "config_mel_band_roformer_kim_ft_unwa.yaml": "c910a0b1493fd3f9cee7a576a7498e44e660510dcaaf5d0d50d5363dde1d0010"
+  }
+}

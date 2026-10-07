@@ -48,10 +48,12 @@ def edit_clip(store, job_id, dataset_id, clip_id, start_seconds, end_seconds, pr
                     "duration": (end - start) / sr}
         artifact = store.import_file(path, name=f"{manifest.get('singer','未分类歌手')}-clip-edited.wav", job_id=job_id,
                                     metadata={"source_id": source["id"], "master_id": source["master_id"], "interval": interval, "parent_clip_id": clip_id})
-        reasons = [r for r in original["reasons"] if r not in {"SHORT_CLIP", "UNSAFE_BOUNDARY", "EXACT_DUPLICATE", "NEAR_DUPLICATE", "CLIPPING_DETECTED", "SEVERE_CLIPPING", "LOW_SIGNAL"}]
+        reasons = [r for r in original["reasons"] if r not in {"SHORT_CLIP", "UNSAFE_BOUNDARY", "EXACT_DUPLICATE", "NEAR_DUPLICATE", "CLIPPING_DETECTED", "SEVERE_CLIPPING", "LOW_SIGNAL", "CLIP_UNDER_ONE_SECOND",
+                                                             "COMPLEX_HARMONY", "HARMONY_UNCERTAIN", "HARMONY_INPUT_UNCERTAIN", "HARMONY_STEMS_MISALIGNED", "HARMONY_NOT_CHECKED", "HARMONY_CHECK_REQUIRED"}]
         new = {**copy.deepcopy(original), **interval, "artifact_id": artifact["id"], "name": artifact["name"], "status": "review",
                "metrics": {**inspect_audio(audio, sr), "plateau_ratio": plateau_ratio(audio)},
-               "singing": voice.summary(), "reasons": [*reasons, "MANUAL_BOUNDARY_REVIEW"],
+               "singing": voice.summary(), "harmony": {"status": "not_checked", "scope": "clip"},
+               "reasons": [*reasons, "MANUAL_BOUNDARY_REVIEW", "HARMONY_NOT_CHECKED"],
                "duplicate_group": hashlib.sha256(str(sr).encode() + b":" + core.tobytes()).hexdigest(),
                "decision": {"origin": "boundary_edit", "parent_clip_id": clip_id}}
         if len(audio) < sr:
@@ -82,6 +84,7 @@ def edit_clip(store, job_id, dataset_id, clip_id, start_seconds, end_seconds, pr
         for status in ("accepted", "review", "excluded"):
             manifest["summary"][f"{status}_count"] = sum(c["status"] == status for c in manifest["clips"])
         manifest["summary"]["near_duplicate_count"] = sum(bool(c["near_duplicate_of"]) for c in manifest["clips"])
+        manifest["summary"]["harmony_review_count"] = sum("COMPLEX_HARMONY" in c["reasons"] for c in manifest["clips"])
         manifest["parent_manifest_id"] = dataset_id
         assign_split(manifest)
         return store.import_stream(BytesIO(json.dumps(manifest, ensure_ascii=False, indent=2).encode()), name=f"{manifest.get('singer','未分类歌手')}-after-edited.json",

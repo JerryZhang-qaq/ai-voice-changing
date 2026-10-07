@@ -1,0 +1,25 @@
+{
+  "status": "passed",
+  "version": "0.0.4",
+  "pages": 8,
+  "fixture_gpu_cores": true,
+  "checks": [
+    "folder import",
+    "singer inference",
+    "balanced default",
+    "optional clip harmony",
+    "batch and engine inline progress",
+    "current source name",
+    "Y/N review",
+    "readable after/ready ZIP",
+    "waveform",
+    "fixed sidebar",
+    "training/conversion isolation",
+    "stem downloads",
+    "download modal",
+    "manual cache cleanup",
+    "accepted clip protection"
+  ],
+  "console_errors": [],
+  "server_errors": []
+}

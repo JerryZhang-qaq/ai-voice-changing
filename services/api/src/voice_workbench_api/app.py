@@ -4,6 +4,7 @@ import os
 import json
 from pathlib import Path
 import tempfile
+from typing import Literal
 
 from fastapi import FastAPI, Request, UploadFile, File, Form, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
@@ -51,6 +52,8 @@ class PrepareRequest(BaseModel):
     dereverb: bool = False
     denoise: bool = False
     check_harmony: bool = False
+    profile: Literal["balanced", "quality", "fast"] = "balanced"
+    reuse_quality_cache: bool = True
     mode: str = "review"
     solo_confirmed: bool = False
 
@@ -75,13 +78,15 @@ class SeparationRequest(BaseModel):
     source_id: str
     model_id: str
     segment_size: int = Field(default=256, ge=64, le=512)
-    overlap: int = Field(default=8, ge=2, le=50)
+    overlap: int | None = Field(default=None, ge=2, le=50)
+    profile: Literal["balanced", "quality", "fast"] = "balanced"
 
 
 class SongSeparationRequest(BaseModel):
     source_id: str
     segment_size: int = Field(default=256, ge=64, le=512)
-    overlap: int = Field(default=8, ge=2, le=50)
+    overlap: int | None = Field(default=None, ge=2, le=50)
+    profile: Literal["balanced", "quality", "fast"] = "balanced"
 
 
 class TrainRequest(BaseModel):
@@ -125,7 +130,8 @@ class CoverRequest(BaseModel):
     rms_mix: float = Field(default=1, ge=0, le=1)
     speaker_id: int = Field(default=0, ge=0, le=109)
     segment_size: int = Field(default=256, ge=64, le=512)
-    overlap: int = Field(default=8, ge=2, le=50)
+    overlap: int | None = Field(default=None, ge=2, le=50)
+    profile: Literal["balanced", "quality", "fast"] = "balanced"
     vocal_db: float = Field(default=0, ge=-40, le=12)
     instrumental_db: float = Field(default=0, ge=-40, le=12)
     format: str = "wav"
@@ -135,10 +141,10 @@ class CoverRequest(BaseModel):
 
 
 def create_app(root=None, web_dir=None):
-    app = FastAPI(title="AI 翻唱工作台", version="0.0.3")
+    app = FastAPI(title="AI 翻唱工作台", version="0.0.4")
     store = ArtifactStore(root or os.environ.get("WORKBENCH_RUNTIME", "runtime"))
     app.state.store = store
-    store.set_runtime("app_version", {"version": "0.0.3"})
+    store.set_runtime("app_version", {"version": "0.0.4"})
 
     @app.exception_handler(NotFound)
     async def not_found(request: Request, error: NotFound):
@@ -236,20 +242,38 @@ def create_app(root=None, web_dir=None):
     def job_logs(job_id: str):
         job = store.job(job_id)
         paths = []
+        # Inventory is newest first. Append saved steps chronologically so the
+        # response's size limit retains the latest output, not the first step.
+        logs = [a for a in store.inventory()["items"]
+                if a["job_id"] == job_id and a["metadata"].get("kind") == "engine_log"]
+        for artifact in sorted(logs, key=lambda a: a["created_at"]):
+            try:
+                paths.append(store.path(artifact["id"]))
+            except NotFound:
+                pass
+        # The current workspace can contain output newer than saved steps.
         if job["metadata"].get("workspace_id"):
             try:
                 paths.append(store.path(job["metadata"]["workspace_id"]) / "engine.log")
             except NotFound:
                 pass
-        for artifact in store.inventory()["items"]:
-            if artifact["job_id"] == job_id and artifact["metadata"].get("kind") == "engine_log":
-                paths.append(store.path(artifact["id"]))
+        relative = job["metadata"].get("live_engine_log")
+        if isinstance(relative, str) and job["status"] == "running":
+            # Only this job's direct processing directory may expose a live log.
+            parts = Path(relative).parts
+            if len(parts) == 2 and parts[0].startswith(f"processing-{job_id}-") and parts[1] == "engine.log":
+                live = store.root / relative
+                if not live.parent.is_symlink() and live.resolve().is_relative_to(store.root.resolve()):
+                    paths.append(live)
         content = []
         for path in paths:
             if path.is_file() and not path.is_symlink():
-                with path.open("rb") as stream:
-                    stream.seek(max(0, path.stat().st_size - 65536))
-                    content.append(stream.read(65536).decode("utf-8", errors="replace"))
+                try:
+                    with path.open("rb") as stream:
+                        stream.seek(max(0, path.stat().st_size - 65536))
+                        content.append(stream.read(65536).decode("utf-8", errors="replace"))
+                except FileNotFoundError:
+                    pass  # A live processing directory can close during polling.
         return {"text": "\n".join(content)[-65536:]}
 
     @app.get("/api/engines")
@@ -384,14 +408,13 @@ def create_app(root=None, web_dir=None):
     @app.post("/api/datasets/prepare", status_code=202)
     def prepare(body: PrepareRequest):
         if body.folder_singer:
-            body.check_harmony = True
             folder = next((f for f in store.training_folders() if f["singer"] == body.folder_singer), None)
             if not folder:
                 raise NotFound("训练素材文件夹不存在")
             body.source_ids = folder["source_ids"]
         if not body.source_ids:
             raise ValueError("请选择训练素材文件夹")
-        preprocessing_fields = {"force_vocal_separation", "separate_backing", "dereverb", "denoise", "check_harmony"}
+        preprocessing_fields = {"force_vocal_separation", "separate_backing", "dereverb", "denoise", "check_harmony", "profile", "reuse_quality_cache"}
         policy = PreparationPolicy(body.mode, body.solo_confirmed)
         policy.validate()
         config = SliceConfig(**body.model_dump(exclude={"source_ids", "folder_singer", "mode", "solo_confirmed", *preprocessing_fields}))
@@ -405,7 +428,7 @@ def create_app(root=None, web_dir=None):
                 raise ValueError("请选择歌曲或人声音频")
             if source["metadata"].get("kind") == "song" or body.force_vocal_separation:
                 required.add("vocals_melband_unwa")
-        if body.separate_backing or body.check_harmony or body.mode == "automatic":
+        if body.separate_backing or body.check_harmony:
             required.add("lead_melband_aufr33")
         if body.dereverb:
             required.add("dereverb_melband_anvuew")
@@ -526,6 +549,10 @@ def create_app(root=None, web_dir=None):
                 return False
         for clip in manifest["clips"]:
             clip["available"] = available(clip["artifact_id"])
+            harmony = clip.get("harmony", {})
+            for key in ("lead", "backing", "report"):
+                if harmony.get(f"{key}_id"):
+                    harmony[f"{key}_available"] = available(harmony[f"{key}_id"])
         for source in manifest.get("sources", []):
             for stage in source.get("processing", {}).get("stages", []):
                 for key in ("input", "candidate", "selected", "report"):

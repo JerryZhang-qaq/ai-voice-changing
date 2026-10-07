@@ -1,4 +1,4 @@
-"""Verified in-place 0.0.3 upgrade. Environments and trained outputs stay in place."""
+"""Verified in-place upgrade; audio, datasets, caches and models stay in place."""
 from __future__ import annotations
 
 import argparse
@@ -19,7 +19,7 @@ from voice_workbench_storage import ArtifactStore
 from voice_workbench_storage.locking import WorkerLock
 from voice_workbench_storage.store import is_reference
 
-VERSION = "0.0.3"
+VERSION = "0.0.4"
 ROOT_FILES = {"README.md", "LICENSE", "THIRD_PARTY.md", "pyproject.toml", "requirements.lock", ".env.example", ".gitignore", ".gitattributes", ".dockerignore"}
 CODE_DIRECTORIES = {"packages", "services", "scripts", "tests", "docs", "deploy", ".github", "apps"}
 REQUIRED_FILES = {"pyproject.toml", "apps/web/dist/index.html", "Install-Windows.cmd", "Start-Windows.cmd",
@@ -37,7 +37,7 @@ def allowed(relative):
 def checked_manifest(source):
     manifest = json.loads((source / "RELEASE-MANIFEST.json").read_text(encoding="utf-8"))
     if not isinstance(manifest, dict) or not REQUIRED_FILES.issubset(manifest):
-        raise ValueError("安装包文件清单不完整，请重新完整解压 0.0.3 ZIP")
+        raise ValueError(f"安装包文件清单不完整，请重新完整解压 {VERSION} ZIP")
     for relative, expected in manifest.items():
         if not allowed(relative):
             raise ValueError(f"安装包包含越界文件路径：{relative}")
@@ -49,7 +49,7 @@ def checked_manifest(source):
             raise ValueError(f"安装包完整性校验失败：{relative}；请重新完整解压")
     project = tomllib.loads((source / "pyproject.toml").read_text(encoding="utf-8"))["project"]
     if project["version"] != VERSION or project["name"] != "voice-workbench":
-        raise ValueError("此升级器仅适用于 0.0.3 安装包")
+        raise ValueError(f"此升级器仅适用于 {VERSION} 安装包")
     return manifest
 
 
@@ -64,27 +64,6 @@ def atomic_json(path, value):
         temporary.unlink(missing_ok=True)
 
 
-def clear_legacy(runtime, cutoff):
-    store = ArtifactStore(runtime)
-    # WorkerLock proves the owning worker is stopped. Stale leases from crashed
-    # workers are released explicitly before the user's requested old-data reset.
-    for job in store.jobs():
-        if job["status"] in {"queued", "running"}:
-            store.update_job(job["id"], "interrupted", error="0.0.3 覆盖升级已终止旧任务，请在新版本重新提交")
-    selected = []
-    for item in store.inventory()["items"]:
-        if item["created_at"] > cutoff:
-            continue
-        kind = item["metadata"].get("kind")
-        if (item["role"] in {"source", "dataset"} or kind in {"dataset_export", "dataset_prepared_export"}
-                or item["role"] == "cache" and kind not in {"workspace", "converted_audio"}):
-            selected.append(item["id"])
-    print(f"清理旧音源、切片与数据集版本：{len(selected)} 项；保留模型、索引、转换结果、成品及训练工作目录。", flush=True)
-    if not selected:
-        return {"deleted_ids": [], "reclaimed_bytes": 0, "errors": [], "skipped": []}
-    return store.delete_artifacts(selected)
-
-
 def upgrade(source, target):
     source = Path(source).absolute()
     target = Path(target).absolute()
@@ -97,8 +76,7 @@ def upgrade(source, target):
             raise ValueError("请选择原 VoiceWorkbench 安装文件夹")
     runtime = target / "runtime"
     runtime.mkdir(parents=True, exist_ok=True)
-    receipt = runtime / "diagnostics/upgrade-0.0.3.json"
-    pending = runtime / "diagnostics/upgrade-0.0.3-pending.json"
+    receipt = runtime / f"diagnostics/upgrade-{VERSION}.json"
     try:
         lock = WorkerLock(runtime / "worker.lock")
         lock.__enter__()
@@ -106,19 +84,10 @@ def upgrade(source, target):
         raise RuntimeError("请先关闭旧工作台的启动窗口，再运行覆盖升级；旧文件尚未修改") from error
     try:
         catalog_exists = (runtime / "catalog.sqlite3").exists()
-        app_version = None
-        if catalog_exists:
-            with sqlite3.connect(runtime / "catalog.sqlite3") as db:
-                try:
-                    row = db.execute("SELECT value FROM runtime_state WHERE key='app_version'").fetchone()
-                    app_version = json.loads(row[0]).get("version") if row else None
-                except sqlite3.OperationalError:
-                    pass
         old_version = tomllib.loads((target / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-        cleanup_needed = not receipt.exists() and catalog_exists and (pending.exists() or old_version != VERSION or app_version != VERSION)
-        if cleanup_needed and not pending.exists():
-            atomic_json(pending, {"version": VERSION, "cutoff": time.time()})
-            with sqlite3.connect(runtime / "catalog.sqlite3") as original, sqlite3.connect(runtime / "diagnostics/catalog-before-0.0.3.sqlite3") as backup:
+        if catalog_exists and not receipt.exists():
+            (runtime / "diagnostics").mkdir(exist_ok=True)
+            with sqlite3.connect(runtime / "catalog.sqlite3") as original, sqlite3.connect(runtime / f"diagnostics/catalog-before-{VERSION}.sqlite3") as backup:
                 original.backup(backup)
         old_manifest = {}
         if source != target and (target / "RELEASE-MANIFEST.json").is_file():
@@ -145,16 +114,16 @@ def upgrade(source, target):
                     if path.is_file() and not any(is_reference(p) for p in (path, *path.parents) if p == target or target in p.parents):
                         path.unlink()
             shutil.copyfile(source / "RELEASE-MANIFEST.json", target / "RELEASE-MANIFEST.json")
-        if cleanup_needed:
-            intent = json.loads(pending.read_text(encoding="utf-8"))
-            result = clear_legacy(runtime, intent["cutoff"])
-            if result["errors"] or result["skipped"]:
-                raise RuntimeError(f"部分旧文件尚未清理，请关闭占用文件的软件后重新运行安装：{result}")
-            atomic_json(receipt, {"version": VERSION, "target": str(target), "completed_at": time.time(), **result})
-            pending.unlink(missing_ok=True)
-        elif not receipt.exists():
-            atomic_json(receipt, {"version": VERSION, "target": str(target), "completed_at": time.time(), "deleted_ids": [], "fresh_install": True})
-        print(f"0.0.3 已覆盖到原目录：{target}。依赖环境和基础模型继续复用。", flush=True)
+        if catalog_exists:
+            store = ArtifactStore(runtime)
+            for job in store.jobs():
+                if job["status"] in {"queued", "running"}:
+                    store.update_job(job["id"], "interrupted", error=f"{VERSION} 覆盖升级，请在新版本重新提交任务；已有产物保留")
+        if not receipt.exists():
+            atomic_json(receipt, {"version": VERSION, "previous_version": old_version, "target": str(target), "completed_at": time.time(),
+                                  "deleted_ids": [], "preserved_data": True, "fresh_install": old_version == VERSION})
+        print(f"{VERSION} 已覆盖到原目录：{target}。素材、数据集、缓存、模型、依赖环境和基础权重均保留。", flush=True)
+        print(f"请从此目录启动：{target / 'Start-Windows.cmd'}", flush=True)
         return target
     finally:
         lock.__exit__(None, None, None)

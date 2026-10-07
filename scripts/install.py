@@ -27,7 +27,7 @@ def environment(directory):
     return interpreter(directory)
 
 
-def ensure_packages(python, arguments, expected):
+def ensure_packages(python, arguments, expected, env=None):
     """Skip network resolution when the existing environment already satisfies pins."""
     import json
     script = "import importlib.metadata as m,json; names=" + repr(list(expected)) + "; print(json.dumps({n:m.version(n) for n in names}))"
@@ -39,7 +39,12 @@ def ensure_packages(python, arguments, expected):
     if satisfied:
         print("复用已安装依赖：", ", ".join(expected), flush=True)
     else:
-        run([python, "-m", "pip", "install", *arguments])
+        run([python, "-m", "pip", "install", *arguments], **({"env": env} if env is not None else {}))
+
+
+def pinned_packages(path):
+    return dict(line.strip().split("==", 1) for line in path.read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#") and "==" in line)
 
 
 def main():
@@ -53,8 +58,8 @@ def main():
         if not shutil.which(name):
             raise SystemExit(f"缺少 {name}，请先运行 Install-Windows.cmd 或按 docs/windows.md 安装依赖")
     python = environment(ROOT / ".venv")
-    run([python, "-m", "pip", "install", "setuptools==80.9.0", "wheel==0.45.1"])
-    run([python, "-m", "pip", "install", "-r", ROOT / "requirements.lock"])
+    ensure_packages(python, ["setuptools==80.9.0", "wheel==0.45.1"], {"setuptools": "80.9.0", "wheel": "0.45.1"})
+    ensure_packages(python, ["-r", ROOT / "requirements.lock"], pinned_packages(ROOT / "requirements.lock"))
     run([python, "-m", "pip", "install", "--no-deps", "--no-build-isolation", "-e", ROOT])
     if not (ROOT / "apps/web/dist/index.html").is_file():
         npm = shutil.which("npm")
@@ -80,15 +85,17 @@ def main():
         raise SystemExit("已有 RVC 目录版本不匹配，请使用新的运行目录；原目录未修改")
     for engine in ("rvc", "separation"):
         ep = environment(runtime / "venvs" / engine)
-        run([ep, "-m", "pip", "install", "setuptools==80.9.0", "wheel==0.45.1"])
+        ensure_packages(ep, ["setuptools==80.9.0", "wheel==0.45.1"], {"setuptools": "80.9.0", "wheel": "0.45.1"})
         ensure_packages(ep, [f"torch==2.7.1+{flavor}", f"torchaudio==2.7.1+{flavor}", f"torchvision==0.22.1+{flavor}", "--index-url", f"https://download.pytorch.org/whl/{flavor}"], {"torch":f"2.7.1+{flavor}","torchaudio":f"2.7.1+{flavor}","torchvision":f"0.22.1+{flavor}"})
         if engine == "rvc":
-            run([ep, "-m", "pip", "install", "-r", ROOT / "scripts/rvc-requirements.txt", "--index-url", "https://pypi.org/simple"])
+            ensure_packages(ep, ["-r", ROOT / "scripts/rvc-requirements.txt", "--index-url", "https://pypi.org/simple"], pinned_packages(ROOT / "scripts/rvc-requirements.txt"))
         else:
             env = os.environ.copy()
             if os.name != "nt" and not shutil.which("clang") and shutil.which("gcc"):
                 env["CC"] = "gcc"
-            run([ep, "-m", "pip", "install", "audio-separator[gpu]==0.47.0", "-c", ROOT / "scripts/separation-constraints.txt", "--index-url", "https://pypi.org/simple"], env=env)
+            expected = {k:v for k,v in pinned_packages(ROOT / "scripts/separation-constraints.txt").items() if k not in {"torch", "torchaudio", "torchvision"}}
+            expected["audio-separator"] = "0.47.0"
+            ensure_packages(ep, ["audio-separator[gpu]==0.47.0", "-c", ROOT / "scripts/separation-constraints.txt", "--index-url", "https://pypi.org/simple"], expected, env=env)
         lock = subprocess.check_output([str(ep), "-m", "pip", "freeze"], text=True)
         (runtime / f"{engine}-installed.lock").write_text(lock, encoding="utf-8")
         run([ep, "-c", "import torch; assert torch.cuda.is_available(); assert torch.cuda.get_device_capability(0)>=(8,9); x=torch.randn(32,32,device='cuda'); print(torch.cuda.get_device_name(0), (x@x).sum().item()); torch.cuda.synchronize()"])

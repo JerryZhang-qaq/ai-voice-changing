@@ -1,10 +1,10 @@
-"""Versioned v1 decisions under the user's explicit solo-input constraint."""
+"""Clip-level decisions; harmony warnings always allow human review."""
 from dataclasses import asdict, dataclass
 
 import numpy as np
 
 
-ADMISSION_VERSION = "solo-first-alpha-2"
+ADMISSION_VERSION = "clip-review-alpha-3"
 
 
 @dataclass(frozen=True)
@@ -16,7 +16,7 @@ class PreparationPolicy:
         if self.mode not in {"review", "automatic"}:
             raise ValueError("数据准备模式应为 review 或 automatic")
         if self.mode == "automatic" and not self.solo_confirmed:
-            raise ValueError("自动准备前需确认所有素材均为同一歌手独唱")
+            raise ValueError("自动准备前需确认所有素材均属于同一歌手")
 
     def dict(self):
         return asdict(self)
@@ -33,7 +33,7 @@ def decide_clip(policy, metrics, reasons, voice, harmony):
     reasons = list(dict.fromkeys(reasons))
     evidence = {"version": ADMISSION_VERSION, "mode": policy.mode, "solo_confirmed": policy.solo_confirmed,
                 "identity_check": "out_of_scope", "threshold_validation": "alpha", "harmony_status": harmony.get("status", "not_checked")}
-    excluded = {"EXACT_DUPLICATE", "LOW_SIGNAL", "SEVERE_CLIPPING", "COMPLEX_HARMONY", "CLIP_UNDER_ONE_SECOND"}
+    excluded = {"EXACT_DUPLICATE", "LOW_SIGNAL", "SEVERE_CLIPPING", "CLIP_UNDER_ONE_SECOND"}
     if metrics.get("duration", 1) < 1:
         reasons.append("CLIP_UNDER_ONE_SECOND")
     if metrics["rms_db"] < -70:
@@ -47,7 +47,7 @@ def decide_clip(policy, metrics, reasons, voice, harmony):
     if harmony.get("status") == "rejected":
         reasons.append("COMPLEX_HARMONY")
     elif harmony.get("status") != "passed":
-        reasons.extend(harmony.get("reasons") or ["HARMONY_CHECK_REQUIRED"])
+        reasons.extend(harmony.get("reasons") or ["HARMONY_NOT_CHECKED"])
     if not policy.solo_confirmed:
         reasons.append("SOLO_DECLARATION_REQUIRED")
     reasons = list(dict.fromkeys(reasons))

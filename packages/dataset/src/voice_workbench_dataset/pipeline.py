@@ -16,20 +16,22 @@ from .duplicates import NearDuplicateIndex, DUPLICATE_VERSION
 from .quality import GUARD_VERSION
 from .analysis import analyze_file, ANALYSIS_VERSION
 from .admission import PreparationPolicy, decide_clip, plateau_ratio, ADMISSION_VERSION
+from .harmony import HARMONY_VERSION
 from .curation import assign_split
 
 
-PROCESSOR_VERSION = "solo-pipeline-4"
+PROCESSOR_VERSION = "clip-review-pipeline-5"
 
 
-def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], config: SliceConfig, progress=None, *, processing_records=None, policy=None):
+def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], config: SliceConfig, progress=None, *, processing_records=None, policy=None, harmony_checker=None, source_progress=None, clip_progress=None):
     config.validate()
     policy = policy or PreparationPolicy()
     policy.validate()
     records = processing_records or [{"original_id": aid, "stages": []} for aid in source_ids]
     if len(records) != len(source_ids):
         raise ValueError("来源处理记录与素材不匹配")
-    cache_key = hashlib.sha256(json.dumps({"sources": [(a, store.get(a)["sha256"]) for a in source_ids], "config": config.dict(), "processor": PROCESSOR_VERSION, "processing": records, "policy": policy.dict()}, sort_keys=True).encode()).hexdigest()
+    cache_key = hashlib.sha256(json.dumps({"sources": [(a, store.get(a)["sha256"]) for a in source_ids], "config": config.dict(), "processor": PROCESSOR_VERSION, "processing": records, "policy": policy.dict(),
+                                        "clip_harmony_version": HARMONY_VERSION if harmony_checker else None}, sort_keys=True).encode()).hexdigest()
     cached = store.cached(cache_key, job_id)
     if cached:
         previous = json.loads(store.path(cached["id"]).read_text(encoding="utf-8"))
@@ -39,7 +41,8 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
         except NotFound:
             pass  # A cleaned clip means this data preparation must be rebuilt.
     singer = store.get(source_ids[0])["metadata"].get("singer", "未分类歌手")
-    dataset = {"schema_version": 4, "singer": singer, "processor_version": PROCESSOR_VERSION, "config": config.dict(), "policy": policy.dict(),
+    dataset = {"schema_version": 5, "singer": singer, "processor_version": PROCESSOR_VERSION, "config": config.dict(), "policy": policy.dict(),
+               "harmony_review": {"scope": "clip", "enabled": harmony_checker is not None},
                "quality_rules": {"preservation_version": GUARD_VERSION, "duplicate_version": DUPLICATE_VERSION, "admission_version": ADMISSION_VERSION, "analysis_version": ANALYSIS_VERSION, "calibrated": False},
                "quality_mode": policy.mode, "sources": [], "clips": [], "validation": {"status": "not_split"}}
     seen = {}
@@ -47,16 +50,14 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
         work = Path(tmp)
         duplicates = NearDuplicateIndex(work)
         for index, source_id in enumerate(source_ids):
+            if source_progress:
+                source_progress(index, "start")
             if progress:
                 progress("解码与诊断", index, len(source_ids))
             source = store.get(source_id)
             processing = records[index]
-            harmony = processing.get("harmony", {})
-            if harmony.get("status") == "rejected":
-                dataset["sources"].append({"id": source_id, "original_id": processing["original_id"], "sha256": source["sha256"],
-                                           "processing": processing, "status": "excluded", "reasons": ["COMPLEX_HARMONY"],
-                                           "analysis": {"activity_seconds": 0.}})
-                continue
+            # Legacy song-level reports are provenance only. They must never
+            # skip a source or supply a blanket decision for all its clips.
             master_path = work / "master.wav"
             provenance = decode(store.path(source_id), master_path)
             x, sr = sf.read(master_path, dtype="float32", always_2d=True)
@@ -81,6 +82,8 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
             dataset["sources"].append({"id": source_id, "original_id": processing["original_id"], "sha256": source["sha256"], "master_id": master["id"], "processing": processing,
                                        "sample_rate": sr, "provenance": provenance, "diagnosis": diagnosis, "channel": channel, "cleanup": cleanup, "analysis": analysis, "reasons": source_reasons})
             for clip_index, interval in enumerate(slices):
+                if clip_progress:
+                    clip_progress(clip_index, len(slices))
                 if progress:
                     progress("切片与质量记录", index, len(source_ids))
                 audio = clean[interval["start_sample"]:interval["end_sample"]]
@@ -98,17 +101,26 @@ def prepare_dataset(store: ArtifactStore, job_id: str, source_ids: list[str], co
                 duplicate_check = {"version": DUPLICATE_VERSION, "status": "exact_duplicate", "matches": []} if fingerprint in seen else duplicates.add(artifact["id"], core, sr)
                 if duplicate_check["matches"]:
                     reasons.append("NEAR_DUPLICATE")
+                harmony = {"status": "not_checked", "scope": "clip"}
+                status, _, _ = decide_clip(policy, metrics, reasons, singing, harmony)
+                if harmony_checker and status != "excluded":
+                    if progress:
+                        progress(f"切片和声辅助检查 · {index + 1}/{len(source_ids)} 首 · {clip_index + 1}/{len(slices)} 段", clip_index, len(slices))
+                    harmony = {**harmony_checker(artifact["id"]), "scope": "clip"}
                 status, reasons, decision = decide_clip(policy, metrics, reasons, singing, harmony)
                 seen.setdefault(fingerprint, artifact["id"])
                 dataset["clips"].append({"artifact_id": artifact["id"], "name": artifact["name"], "source_name": source["name"], "source_id": source_id, "source_group": source["metadata"].get("source_group", source["sha256"]),
                                          "sample_rate": sr, **interval, "metrics": metrics, "status": status, "reasons": reasons,
                                          "duplicate_group": fingerprint, "near_duplicate_check": duplicate_check,
-                                         "near_duplicate_of": [m["artifact_id"] for m in duplicate_check["matches"]], "singing": singing, "decision": decision})
+                                         "near_duplicate_of": [m["artifact_id"] for m in duplicate_check["matches"]], "singing": singing, "harmony": harmony, "decision": decision})
             del clean, mono_x
+            if source_progress:
+                source_progress(index, "complete")
         dataset["summary"] = {"clip_count": len(dataset["clips"]), "review_count": sum(c["status"] == "review" for c in dataset["clips"]),
                               "excluded_count": sum(c["status"] == "excluded" for c in dataset["clips"]),
                               "accepted_count": sum(c["status"] == "accepted" for c in dataset["clips"]),
                               "excluded_source_count": sum(s.get("status") == "excluded" for s in dataset["sources"]),
+                              "harmony_review_count": sum("COMPLEX_HARMONY" in c["reasons"] for c in dataset["clips"]),
                               "near_duplicate_count": sum(bool(c["near_duplicate_of"]) for c in dataset["clips"]),
                               "cleanup_fallback_count": sum(stage["decision"] == "fallback_input" for record in records for stage in record["stages"]),
                               "activity_seconds": sum(s["analysis"]["activity_seconds"] for s in dataset["sources"])}

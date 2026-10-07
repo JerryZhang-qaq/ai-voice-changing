@@ -28,7 +28,7 @@ try {
         if ($Upgrade -or ((Test-Path (Join-Path $PackageDirectory 'RELEASE-MANIFEST.json')) -and -not (Test-Path (Join-Path $PackageDirectory 'runtime\venvs')))) {
             Add-Type -AssemblyName System.Windows.Forms
             $Picker = New-Object System.Windows.Forms.FolderBrowserDialog
-            $Picker.Description = '0.0.3 覆盖升级：选择原 0.0.1 安装目录。会清理旧素材、切片和数据集版本，保留模型、索引、成品、基础权重与环境。首次安装可选择当前新包目录。请先关闭旧工作台。'
+            $Picker.Description = '0.0.4 覆盖升级：选择正在使用的安装目录（例如 0.0.3）。保留全部素材、数据集、缓存、模型、基础权重与环境。首次安装可选择当前新包目录。请先关闭旧工作台。'
             $Picker.SelectedPath = $PackageDirectory
             $Picker.ShowNewFolderButton = $false
             if ($Picker.ShowDialog() -ne [System.Windows.Forms.DialogResult]::OK) { throw '已取消安装。' }
@@ -38,7 +38,7 @@ try {
     if (Test-Path (Join-Path $PackageDirectory 'RELEASE-MANIFEST.json')) {
         & $PythonExecutable (Join-Path $PSScriptRoot 'upgrade.py') --target $TargetDirectory
         if ($LASTEXITCODE -ne 0) { throw '覆盖升级未完成，请保留窗口日志。' }
-    } elseif ((Resolve-Path $TargetDirectory).Path -ne (Resolve-Path $PackageDirectory).Path) { throw '覆盖升级需要完整解压的 0.0.3 ZIP 安装包。' }
+    } elseif ((Resolve-Path $TargetDirectory).Path -ne (Resolve-Path $PackageDirectory).Path) { throw '覆盖升级需要完整解压的 0.0.4 ZIP 安装包。' }
     Set-Location $TargetDirectory
     Write-Host "当前安装目录：$TargetDirectory"
     Write-Host '[2/5] 检查 Git...'
