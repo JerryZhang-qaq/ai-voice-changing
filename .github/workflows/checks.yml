@@ -30,9 +30,9 @@ jobs:
         run: python -m pytest -q
       - name: Windows audio, API, locks and process ownership
         if: runner.os == 'Windows'
-        run: python -m pytest tests/dataset tests/integration tests/storage/test_locking.py tests/storage/test_directories.py -q
+        run: python -m pytest tests/dataset tests/integration tests/storage/test_locking.py tests/storage/test_directories.py -q --junitxml=windows-core-results.xml
       - name: Real Windows installer entry and failure retention
-        if: runner.os == 'Windows'
+        if: always() && runner.os == 'Windows'
         env:
           PYTHONUTF8: '1'
         run: python -m pytest tests/windows -q -s --junitxml=windows-installer-results.xml
@@ -42,6 +42,9 @@ jobs:
           $env:PYTHONUTF8 = "1"
           if (Test-Path windows-installer-results.xml) {
             python scripts/report-junit.py windows-installer-results.xml
+          }
+          if (Test-Path windows-core-results.xml) {
+            python scripts/report-junit.py windows-core-results.xml
           }
       - run: npm ci
         working-directory: apps/web
