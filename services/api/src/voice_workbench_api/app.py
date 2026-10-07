@@ -271,7 +271,7 @@ def create_app(root=None, web_dir=None):
                 try:
                     with path.open("rb") as stream:
                         stream.seek(max(0, path.stat().st_size - 65536))
-                        content.append(stream.read(65536).decode("utf-8", errors="replace"))
+                        content.append(stream.read(65536).decode("utf-8", errors="replace").replace("\r\n", "\n"))
                 except FileNotFoundError:
                     pass  # A live processing directory can close during polling.
         return {"text": "\n".join(content)[-65536:]}

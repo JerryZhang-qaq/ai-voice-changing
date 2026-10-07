@@ -55,13 +55,14 @@ def test_missing_log_file_does_not_hide_remaining_records(tmp_path):
     assert response.json()['text'] == '仍可读取的新记录\n'
 
 
-def test_live_separation_log_is_readable_before_engine_exit(tmp_path):
+@pytest.mark.parametrize('newline', ['\n', '\r\n'])
+def test_live_separation_log_is_readable_before_engine_exit(tmp_path, newline):
     app = create_app(tmp_path)
     store = app.state.store
     job = store.create_job('dataset_prepare', status='running')
     directory = store.root / f"processing-{job['id']}-session-test"
     directory.mkdir()
-    (directory / 'engine.log').write_text('分块进度 5/100\n', encoding='utf-8')
+    (directory / 'engine.log').write_bytes(('分块进度 5/100' + newline).encode('utf-8'))
     store.update_job(job['id'], 'running', metadata={'live_engine_log': f'{directory.name}/engine.log'})
     client = TestClient(app)
     assert client.get(f"/api/jobs/{job['id']}/logs").json()['text'] == '分块进度 5/100\n'
