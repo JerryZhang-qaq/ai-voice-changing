@@ -136,7 +136,7 @@ class ArtifactStore:
         if name:
             relative = readable_stem(Path(name).stem, 48) + "__" + relative
         if metadata.get("singer") and role not in {"model", "export"}:
-            name = singer_name(metadata["singer"])
+            artist = singer_name(metadata["singer"])
             category = "转换素材" if metadata.get("purpose") == "conversion" and role == "source" else "原始素材" if role == "source" else "切片数据集" if metadata.get("interval") or metadata.get("kind") == "dataset_manifest" else "处理中间文件"
             version = metadata.get("version_id") or job_id or metadata.get("parent_id")
             if version and not re.fullmatch(r"[0-9a-f]{32}", version):
@@ -145,7 +145,7 @@ class ArtifactStore:
                 label = "ready" if metadata.get("kind") == "dataset_manifest" and metadata.get("parent_id") else "after"
                 group = Path(name).stem if name and metadata.get("kind") == "dataset_manifest" else f"{metadata['singer']}-{label}"
                 version = readable_stem(group, 48) + "__" + version
-            relative = "/".join(["歌手", name, category, *([version] if version and role != "source" else []), relative])
+            relative = "/".join(["歌手", artist, category, *([version] if version and role != "source" else []), relative])
         return relative, metadata
 
     @staticmethod

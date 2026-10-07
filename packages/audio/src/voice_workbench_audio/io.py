@@ -13,7 +13,9 @@ class AudioError(ValueError):
 
 
 def probe(path: Path):
-    result = subprocess.run(["ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-show_streams", "-show_format", "-of", "json", str(path)], capture_output=True, text=True, timeout=30)
+    # FFprobe emits UTF-8 JSON including filenames. Parse bytes directly: native
+    # Windows' default code page can otherwise fail on Chinese/Japanese paths.
+    result = subprocess.run(["ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-show_streams", "-show_format", "-of", "json", str(path)], capture_output=True, timeout=30)
     if result.returncode:
         raise AudioError("音频无法解码，请检查文件格式和完整性")
     data = json.loads(result.stdout)
@@ -39,7 +41,7 @@ def decode(source: Path, destination: Path, *, target_rate: int | None = None):
         raise AudioError("工作采样率超出允许范围")
     rate = min(info["sample_rate"], target_rate or 48000)
     channels = min(info["channels"], 2)
-    result = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-i", str(source), "-map", "0:a:0", "-vn", "-t", "1800", "-ar", str(rate), "-ac", str(channels), "-c:a", "pcm_f32le", "-y", str(destination)], capture_output=True, text=True, timeout=180)
+    result = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-protocol_whitelist", "file,pipe", "-i", str(source), "-map", "0:a:0", "-vn", "-t", "1800", "-ar", str(rate), "-ac", str(channels), "-c:a", "pcm_f32le", "-y", str(destination)], capture_output=True, timeout=180)
     if result.returncode:
         raise AudioError("音频解码失败")
     with sf.SoundFile(destination) as audio:

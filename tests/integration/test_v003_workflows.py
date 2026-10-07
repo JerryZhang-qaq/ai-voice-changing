@@ -71,6 +71,7 @@ def test_shorter_than_one_second_cannot_be_manually_accepted(tmp_path):
     accepted=client.post(path,json={'decisions':{clips[1]['artifact_id']:'accepted',clips[2]['artifact_id']:'accepted'}})
     assert accepted.status_code == 201, accepted.text
     assert accepted.json()['name'] == '歌手-ready.json'
+    assert '/切片数据集/歌手-ready__' in accepted.json()['location']
     result=client.get(f"/api/datasets/{accepted.json()['id']}").json()
     assert result['clips'][0]['status']=='excluded' and result['summary']['accepted_count']==2
 

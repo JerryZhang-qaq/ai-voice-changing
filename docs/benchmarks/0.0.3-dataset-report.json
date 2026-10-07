@@ -1,0 +1,34 @@
+{
+  "version": "0.0.3",
+  "repeat_import": "reused_same_versions",
+  "dataset_manifest_count": 2,
+  "datasets": [
+    {
+      "singer": "Opencpop",
+      "input_seconds": 104.3577097505669,
+      "clip_count": 11,
+      "review_count": 11,
+      "excluded_count": 0,
+      "reasons": {
+        "HARMONY_CHECK_REQUIRED": 11,
+        "UNSAFE_BOUNDARY": 2
+      }
+    },
+    {
+      "singer": "NIT-SONG070-F001",
+      "input_seconds": 136.79989583333332,
+      "clip_count": 22,
+      "review_count": 19,
+      "excluded_count": 3,
+      "reasons": {
+        "SHORT_CLIP": 6,
+        "CLIP_UNDER_ONE_SECOND": 3,
+        "VOCAL_CONTENT_UNCERTAIN": 3,
+        "HARMONY_CHECK_REQUIRED": 22
+      }
+    }
+  ],
+  "gpu_training": false,
+  "separation_executed": false,
+  "limitations": "Professional dry-voice corpus, no listening score or contamination ground truth"
+}

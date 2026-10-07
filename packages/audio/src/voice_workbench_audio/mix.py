@@ -31,7 +31,7 @@ def mix(store: ArtifactStore, job_id, vocal_id, instrumental_id, *, backing_id=N
             tracks.append(output)
         sizes = [sf.info(track).frames for track in tracks]
         if min(sizes) <= 0 or max(sizes) - min(sizes) > 4410:
-                raise AudioError("人声与伴奏时长相差超过 100 毫秒，请检查对齐")
+            raise AudioError("音轨时长相差超过 100 毫秒，请检查主唱、伴奏与和声对齐")
         # Two passes allow one track-wide attenuation, rather than pumping a limiter.
         gains = [10 ** (vocal_db / 20), 10 ** (instrumental_db / 20)]
         if backing_id:
